@@ -13,8 +13,14 @@ namespace UnityMcpBridge.Editor.Tools
     /// <summary>
     /// Handles asset management operations within the Unity project.
     /// </summary>
+    [InitializeOnLoad]
     public static class ManageAsset
     {
+        static ManageAsset()
+        {
+            CommandRegistry.RegisterCommand("manage_asset", HandleCommand);
+        }
+
         // --- Main Handler ---
 
         // Define the list of valid actions

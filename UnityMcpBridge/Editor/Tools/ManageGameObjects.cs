@@ -12,6 +12,7 @@ namespace UnityMcpBridge.Editor.Tools
     /// Handles GameObject operations within Unity.
     /// This adds a specialized handler for manage_game_objects command distinct from ManageGameObject.
     /// </summary>
+    [InitializeOnLoad]
     public static class ManageGameObjects
     {
         private static readonly List<string> ValidActions = new List<string>
@@ -19,6 +20,11 @@ namespace UnityMcpBridge.Editor.Tools
             "create", "destroy", "find", "get_children", "get_components", "set_active",
             "set_position", "set_rotation", "set_scale", "set_parent", "instantiate", "duplicate"
         };
+
+        static ManageGameObjects()
+        {
+            CommandRegistry.RegisterCommand("manage_game_objects", HandleCommand);
+        }
 
         /// <summary>
         /// Main handler for GameObject operations.

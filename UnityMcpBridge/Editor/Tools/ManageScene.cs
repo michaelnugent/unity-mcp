@@ -16,6 +16,7 @@ namespace UnityMcpBridge.Editor.Tools
     /// Handles scene management operations in Unity.
     /// This adds a specialized handler for the manage_scene command.
     /// </summary>
+    [InitializeOnLoad]
     public static class ManageScene
     {
         private static readonly List<string> ValidActions = new List<string>
@@ -25,6 +26,11 @@ namespace UnityMcpBridge.Editor.Tools
             "set_component", "add_component", "remove_component", "get_position", "get_rotation", 
             "get_scale", "set_parent", "set_active", "capture_screenshot"
         };
+
+        static ManageScene()
+        {
+            CommandRegistry.RegisterCommand("manage_scene", HandleCommand);
+        }
 
         /// <summary>
         /// Main handler for scene management operations.

@@ -12,6 +12,7 @@ namespace UnityMcpBridge.Editor.Tools
     /// <summary>
     /// Handles operations related to Unity Prefabs, such as creating, editing, and instantiating.
     /// </summary>
+    [InitializeOnLoad]
     public static class ManagePrefabs
     {
         private static readonly List<string> ValidActions = new List<string>
@@ -19,6 +20,11 @@ namespace UnityMcpBridge.Editor.Tools
             "create", "open", "save", "revert", "apply", "update", "create_variant",
             "unpack", "list_overrides", "add_component", "remove_component", "instantiate"
         };
+
+        static ManagePrefabs()
+        {
+            CommandRegistry.RegisterCommand("manage_prefabs", HandleCommand);
+        }
 
         /// <summary>
         /// Main handler for prefab operations.

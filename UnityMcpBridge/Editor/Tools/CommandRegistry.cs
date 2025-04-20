@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Newtonsoft.Json.Linq;
+using UnityEngine;
 
 namespace UnityMcpBridge.Editor.Tools
 {
@@ -11,31 +12,56 @@ namespace UnityMcpBridge.Editor.Tools
     {
         // Maps command names (matching those called from Python via ctx.bridge.unity_editor.HandlerName)
         // to the corresponding static HandleCommand method in the appropriate tool class.
-        private static readonly Dictionary<string, Func<JObject, object>> _handlers = new()
+        private static readonly Dictionary<string, Func<JObject, object>> _handlers = new();
+
+        /// <summary>  
+        /// Registers a command handler with a specified name.  
+        /// </summary>  
+        /// <param name="name">The name of the command to register.</param>  
+        /// <param name="commandHandler">The function to handle the command.</param>  
+        public static void RegisterCommand(string name, Func<JObject, object> commandHandler)
         {
-            // Original handlers with "Handle" prefix
-            { "HandleManageScript", ManageScript.HandleCommand },
-            { "HandleManageScene", ManageScene.HandleCommand },
-            { "HandleManageEditor", ManageEditor.HandleCommand },
-            { "HandleManageGameObject", ManageGameObject.HandleCommand },
-            { "HandleManageAsset", ManageAsset.HandleCommand },
-            { "HandleReadConsole", ReadConsole.HandleCommand },
-            { "HandleExecuteMenuItem", ExecuteMenuItem.HandleCommand },
-            
-            // Map Python tool names directly to handlers (as used in Python tools)
-            { "manage_script", ManageScript.HandleCommand },
-            { "manage_scene", ManageScene.HandleCommand },
-            { "manage_editor", ManageEditor.HandleCommand },
-            { "manage_game_objects", ManageGameObjects.HandleCommand },
-            { "manage_asset", ManageAsset.HandleCommand },
-            { "manage_assets", ManageAsset.HandleCommand }, // Allow both singular and plural
-            { "read_console", ReadConsole.HandleCommand },
-            { "execute_menu_item", ExecuteMenuItem.HandleCommand },
-            
-            // New tool handlers
-            { "manage_prefabs", ManagePrefabs.HandleCommand }, // Use our new ManagePrefabs handler
-            { "manage_scenes", ManageScene.HandleCommand }   // For backward compatibility, map plural to singular
-        };
+            // Use case-insensitive comparison for flexibility, although Python side should be consistent
+            string normalizedName = name.ToLower();
+            if (!_handlers.ContainsKey(normalizedName))
+            {
+                _handlers.Add(normalizedName, commandHandler);
+                Debug.Log($"Command '{name}' registered.");
+            }
+            else
+            {
+                Debug.LogWarning($"Command '{name}' already registered. Skipping duplicate registration.");
+            }
+        }
+
+        /// <summary>  
+        /// Executes a registered command by name with the provided parameters.  
+        /// </summary>  
+        /// <param name="name">The name of the command to execute.</param>  
+        /// <param name="paramsObject">The parameters to pass to the command handler.</param>  
+        /// <returns>The result of the command execution or an error message if the command is not found.</returns>  
+        public static object ExecuteCommand(string name, JObject paramsObject)
+        {
+            if (_handlers.TryGetValue(name.ToLower(), out var command))
+            {
+                return command(paramsObject);
+            }
+            else
+            {
+                Debug.LogWarning($"Command '{name}' not found.");
+                return $"Command '{name}' not found.";
+            }
+        }
+
+        /// <summary>  
+        /// Retrieves a list of all registered command names.  
+        /// </summary>  
+        /// <returns>A list of registered command names.</returns>  
+        public static List<string> GetRegisteredCommands()
+        {
+            // Return a list of registered command names
+            return new List<string>(_handlers.Keys);
+        }
 
         /// <summary>
         /// Gets a command handler by name.
@@ -45,13 +71,13 @@ namespace UnityMcpBridge.Editor.Tools
         public static Func<JObject, object> GetHandler(string commandName)
         {
             // Use case-insensitive comparison for flexibility, although Python side should be consistent
-            if (_handlers.TryGetValue(commandName, out var handler))
+            if (_handlers.TryGetValue(commandName.ToLower(), out var handler))
             {
                 return handler;
             }
             else
             {
-                UnityEngine.Debug.LogWarning($"[CommandRegistry] No handler found for command: {commandName}");
+                Debug.LogWarning($"[CommandRegistry] No handler found for command: {commandName}");
                 return null;
             }
         }

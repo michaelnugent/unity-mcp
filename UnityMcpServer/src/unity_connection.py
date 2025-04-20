@@ -166,7 +166,14 @@ class UnityConnection:
 _unity_connection = None
 
 def get_unity_connection() -> UnityConnection:
-    """Retrieve or establish a persistent Unity connection."""
+    """Retrieve or establish a persistent Unity connection.
+    
+    Args:
+        None: This function takes no parameters
+        
+    Returns:
+        UnityConnection: A connected UnityConnection instance ready for use
+    """
     global _unity_connection
     if _unity_connection is not None:
         try:

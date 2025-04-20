@@ -14,6 +14,7 @@ namespace UnityMcpBridge.Editor.Tools
     /// Handles reading and clearing Unity Editor console log entries.
     /// Uses reflection to access internal LogEntry methods/properties.
     /// </summary>
+    [InitializeOnLoad]
     public static class ReadConsole
     {
         // Reflection members for accessing internal LogEntry data
@@ -31,9 +32,12 @@ namespace UnityMcpBridge.Editor.Tools
 
         // Note: Timestamp is not directly available in LogEntry; need to parse message or find alternative?
 
-        // Static constructor for reflection setup
+        // Static constructor for reflection setup and command registration
         static ReadConsole()
         {
+            // Register command with CommandRegistry
+            CommandRegistry.RegisterCommand("read_console", HandleCommand);
+            
             try
             {
                 Type logEntriesType = typeof(EditorApplication).Assembly.GetType(

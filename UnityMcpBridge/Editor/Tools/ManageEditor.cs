@@ -233,14 +233,19 @@ namespace UnityMcpBridge.Editor.Tools
                     ? EditorTools.GetActiveToolName()
                     : toolName; // Get custom name if needed
 
+                // Create simple serializable structures instead of using Unity's Vector3 directly
+                var handleRotationVec = UnityEditor.Tools.handleRotation.eulerAngles;
+                var handlePositionVec = UnityEditor.Tools.handlePosition;
+                
                 var toolInfo = new
                 {
                     activeTool = activeToolName,
                     isCustom = customToolActive,
                     pivotMode = UnityEditor.Tools.pivotMode.ToString(),
                     pivotRotation = UnityEditor.Tools.pivotRotation.ToString(),
-                    handleRotation = UnityEditor.Tools.handleRotation.eulerAngles, // Euler for simplicity
-                    handlePosition = UnityEditor.Tools.handlePosition,
+                    // Use simple arrays instead of Vector3 to avoid serialization issues
+                    handleRotation = new float[] { handleRotationVec.x, handleRotationVec.y, handleRotationVec.z },
+                    handlePosition = new float[] { handlePositionVec.x, handlePositionVec.y, handlePositionVec.z }
                 };
 
                 return Response.Success("Retrieved active tool information.", toolInfo);

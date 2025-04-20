@@ -1,7 +1,7 @@
 """
 Defines the execute_menu_item tool for running Unity Editor menu commands.
 """
-from typing import Dict, Any
+from typing import Dict, Any, Optional, List
 from mcp.server.fastmcp import FastMCP, Context
 from unity_connection import get_unity_connection  # Import unity_connection module
 
@@ -13,18 +13,42 @@ def register_execute_menu_item_tools(mcp: FastMCP):
         ctx: Context,
         menu_path: str,
         action: str = 'execute',
-        parameters: Dict[str, Any] = None,
+        parameters: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Executes a Unity Editor menu item via its path (e.g., "File/Save Project").
 
+        This tool allows LLMs to trigger Unity Editor menu commands programmatically,
+        providing access to the full range of Unity's built-in functionality through
+        its menu system.
+
         Args:
-            ctx: The MCP context.
-            menu_path: The full path of the menu item to execute.
-            action: The operation to perform (default: 'execute').
-            parameters: Optional parameters for the menu item (rarely used).
+            ctx: The MCP context, containing runtime information.
+            menu_path: The full path of the menu item to execute (e.g., "GameObject/Create Empty",
+                      "Window/Package Manager", "Assets/Create/Material").
+            action: The operation to perform (default: 'execute'). Currently only 'execute' 
+                   is supported but future versions may support additional actions.
+            parameters: Optional parameters for the menu item. Most menu items don't require
+                       parameters, but some specialized commands might accept additional data.
 
         Returns:
-            A dictionary indicating success or failure, with optional message/error.
+            A dictionary with the following fields:
+            - success: Boolean indicating if the operation succeeded
+            - message: Success message if the operation was successful
+            - error: Error message if the operation failed
+            - data: Additional data returned by the menu command (if any)
+            
+        Examples:
+            - Execute menu item to save the project:
+              menu_path="File/Save Project"
+              
+            - Create a new empty GameObject:
+              menu_path="GameObject/Create Empty"
+              
+            - Open the Animation window:
+              menu_path="Window/Animation/Animation"
+              
+            - Create a new material:
+              menu_path="Assets/Create/Material"
         """
         
         action = action.lower() if action else 'execute'

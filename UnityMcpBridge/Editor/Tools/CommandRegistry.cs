@@ -13,6 +13,7 @@ namespace UnityMcpBridge.Editor.Tools
         // to the corresponding static HandleCommand method in the appropriate tool class.
         private static readonly Dictionary<string, Func<JObject, object>> _handlers = new()
         {
+            // Original handlers with "Handle" prefix
             { "HandleManageScript", ManageScript.HandleCommand },
             { "HandleManageScene", ManageScene.HandleCommand },
             { "HandleManageEditor", ManageEditor.HandleCommand },
@@ -20,6 +21,20 @@ namespace UnityMcpBridge.Editor.Tools
             { "HandleManageAsset", ManageAsset.HandleCommand },
             { "HandleReadConsole", ReadConsole.HandleCommand },
             { "HandleExecuteMenuItem", ExecuteMenuItem.HandleCommand },
+            
+            // Map Python tool names directly to handlers (as used in Python tools)
+            { "manage_script", ManageScript.HandleCommand },
+            { "manage_scene", ManageScene.HandleCommand },
+            { "manage_editor", ManageEditor.HandleCommand },
+            { "manage_game_objects", ManageGameObjects.HandleCommand },
+            { "manage_asset", ManageAsset.HandleCommand },
+            { "manage_assets", ManageAsset.HandleCommand }, // Allow both singular and plural
+            { "read_console", ReadConsole.HandleCommand },
+            { "execute_menu_item", ExecuteMenuItem.HandleCommand },
+            
+            // New tool handlers
+            { "manage_prefabs", ManagePrefabs.HandleCommand }, // Use our new ManagePrefabs handler
+            { "manage_scenes", ManageScenes.HandleCommand }   // Use our new ManageScenes handler
         };
 
         /// <summary>
@@ -30,16 +45,15 @@ namespace UnityMcpBridge.Editor.Tools
         public static Func<JObject, object> GetHandler(string commandName)
         {
             // Use case-insensitive comparison for flexibility, although Python side should be consistent
-            return _handlers.TryGetValue(commandName, out var handler) ? handler : null;
-            // Consider adding logging here if a handler is not found
-            /*
-            if (_handlers.TryGetValue(commandName, out var handler)) {
+            if (_handlers.TryGetValue(commandName, out var handler))
+            {
                 return handler;
-            } else {
-                UnityEngine.Debug.LogError($\"[CommandRegistry] No handler found for command: {commandName}\");
+            }
+            else
+            {
+                UnityEngine.Debug.LogWarning($"[CommandRegistry] No handler found for command: {commandName}");
                 return null;
             }
-            */
         }
     }
 }

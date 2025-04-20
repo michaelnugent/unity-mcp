@@ -1,16 +1,25 @@
 import socket
 import json
 import logging
+import sys
 from dataclasses import dataclass
-from typing import Dict, Any
+from typing import Dict, Any, Optional, List, Tuple, Union
 from config import config
+from exceptions import ParameterValidationError, UnityCommandError, ConnectionError
 
 # Configure logging using settings from config
+# Explicitly use stderr for logging since stdout is used for protocol communication
 logging.basicConfig(
     level=getattr(logging, config.log_level),
-    format=config.log_format
+    format=config.log_format,
+    stream=sys.stderr  # Force all logs to stderr
 )
 logger = logging.getLogger("unity-mcp-server")
+
+# Maximum number of retries for sending commands
+MAX_RETRIES = 3
+# Time to wait between retries
+RETRY_WAIT = 0.5
 
 @dataclass
 class UnityConnection:
@@ -53,7 +62,7 @@ class UnityConnection:
                 chunk = sock.recv(buffer_size)
                 if not chunk:
                     if not chunks:
-                        raise Exception("Connection closed before receiving data")
+                        raise ConnectionError("Connection closed before receiving data")
                     break
                 chunks.append(chunk)
                 
@@ -94,7 +103,7 @@ class UnityConnection:
                     continue
         except socket.timeout:
             logger.warning("Socket timeout during receive")
-            raise Exception("Timeout receiving Unity response")
+            raise ConnectionError("Timeout receiving Unity response")
         except Exception as e:
             logger.error(f"Error during receive: {str(e)}")
             raise
@@ -103,6 +112,9 @@ class UnityConnection:
         """Send a command to Unity and return its response."""
         if not self.sock and not self.connect():
             raise ConnectionError("Not connected to Unity")
+        
+        # Make sure params is at least an empty dict
+        params = params or {}
         
         # Special handling for ping command
         if command_type == "ping":
@@ -124,7 +136,7 @@ class UnityConnection:
                 raise ConnectionError(f"Connection verification failed: {str(e)}")
         
         # Normal command handling
-        command = {"type": command_type, "params": params or {}}
+        command = {"type": command_type, "params": params}
         try:
             # Check for very large content that might cause JSON issues
             command_size = len(json.dumps(command))
@@ -146,24 +158,37 @@ class UnityConnection:
                 # Log partial response for debugging
                 partial_response = response_data.decode('utf-8')[:500] + "..." if len(response_data) > 500 else response_data.decode('utf-8')
                 logger.error(f"Partial response: {partial_response}")
-                raise Exception(f"Invalid JSON response from Unity: {str(je)}")
+                raise UnityCommandError(f"Invalid JSON response from Unity: {str(je)}")
             
             if response.get("status") == "error":
                 error_message = response.get("error") or response.get("message", "Unknown Unity error")
                 logger.error(f"Unity error: {error_message}")
-                raise Exception(error_message)
+                raise UnityCommandError(error_message)
             
             return response.get("result", {})
+        except ConnectionError:
+            # Re-raise connection errors without wrapping
+            raise
+        except UnityCommandError:
+            # Re-raise command errors without wrapping
+            raise
         except Exception as e:
             logger.error(f"Communication error with Unity: {str(e)}")
             self.sock = None
-            raise Exception(f"Failed to communicate with Unity: {str(e)}")
+            raise ConnectionError(f"Failed to communicate with Unity: {str(e)}")
 
 # Global Unity connection
 _unity_connection = None
 
 def get_unity_connection() -> UnityConnection:
-    """Retrieve or establish a persistent Unity connection."""
+    """Retrieve or establish a persistent Unity connection.
+    
+    Args:
+        None: This function takes no parameters
+        
+    Returns:
+        UnityConnection: A connected UnityConnection instance ready for use
+    """
     global _unity_connection
     if _unity_connection is not None:
         try:
@@ -199,4 +224,4 @@ def get_unity_connection() -> UnityConnection:
         except:
             pass
         _unity_connection = None
-        raise ConnectionError(f"Could not establish valid Unity connection: {str(e)}") 
+        raise ConnectionError(f"Could not establish valid Unity connection: {str(e)}")

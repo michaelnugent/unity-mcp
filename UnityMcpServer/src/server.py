@@ -1,5 +1,6 @@
 from mcp.server.fastmcp import FastMCP, Context, Image
 import logging
+import sys
 from dataclasses import dataclass
 from contextlib import asynccontextmanager
 from typing import AsyncIterator, Dict, Any, List
@@ -11,9 +12,11 @@ from unity_connection import get_unity_connection, UnityConnection
 load_config_from_args()
 
 # Configure logging using settings from config
+# Explicitly use stderr for logging since stdout is used for protocol communication
 logging.basicConfig(
     level=getattr(logging, config.log_level),
-    format=config.log_format
+    format=config.log_format,
+    stream=sys.stderr  # Force all logs to stderr
 )
 logger = logging.getLogger("unity-mcp-server")
 logger.info(f"Starting server with Unity connection to {config.unity_host}:{config.unity_port}")
@@ -65,7 +68,8 @@ def asset_creation_strategy() -> str:
         "- `manage_scene`: Manages scenes.\\n"
         "- `manage_gameobject`: Manages GameObjects in the scene.\\n"
         "- `manage_script`: Manages C# script files.\\n"
-        "- `manage_asset`: Manages prefabs and assets.\\n\\n"
+        "- `manage_asset`: Manages prefabs and assets.\\n"
+        "- `manage_prefabs`: Manages prefab operations such as creating, editing, and instantiating.\\n\\n"
         "Tips:\\n"
         "- Create prefabs for reusable GameObjects.\\n"
         "- Always include a camera and main light in your scenes.\\n"
@@ -73,4 +77,6 @@ def asset_creation_strategy() -> str:
 
 # Run the server
 if __name__ == "__main__":
+    # Add MCP-specific logging instruction
+    logger.info("Starting MCP server with stdio transport, all logs will be sent to stderr")
     mcp.run(transport='stdio')

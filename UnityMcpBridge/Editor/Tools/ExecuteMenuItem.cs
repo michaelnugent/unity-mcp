@@ -28,13 +28,15 @@ namespace UnityMcpBridge.Editor.Tools
         public static object HandleCommand(JObject @params)
         {
             string action = @params["action"]?.ToString().ToLower() ?? "execute"; // Default action
+            string menuPath = @params["menuPath"]?.ToString() ?? @params["menu_path"]?.ToString(); // Support both camelCase and snake_case
+            JObject parameters = @params["parameters"] as JObject;
 
             try
             {
                 switch (action)
                 {
                     case "execute":
-                        return ExecuteItem(@params);
+                        return ExecuteItem(menuPath, parameters);
                     case "get_available_menus":
                         // Getting a comprehensive list of *all* menu items dynamically is very difficult
                         // and often requires complex reflection or maintaining a manual list.
@@ -64,12 +66,8 @@ namespace UnityMcpBridge.Editor.Tools
         /// <summary>
         /// Executes a specific menu item.
         /// </summary>
-        private static object ExecuteItem(JObject @params)
+        private static object ExecuteItem(string menuPath, JObject parameters = null)
         {
-            string menuPath = @params["menu_path"]?.ToString();
-            // string alias = @params["alias"]?.ToString(); // TODO: Implement alias mapping based on refactor plan requirements.
-            // JObject parameters = @params["parameters"] as JObject; // TODO: Investigate parameter passing (often not directly supported by ExecuteMenuItem).
-
             if (string.IsNullOrWhiteSpace(menuPath))
             {
                 return Response.Error("Required parameter 'menu_path' is missing or empty.");
@@ -89,6 +87,10 @@ namespace UnityMcpBridge.Editor.Tools
             // TODO: Handle parameters ('parameters' object) if a viable method is found.
             // This is complex as EditorApplication.ExecuteMenuItem doesn't take arguments directly.
             // It might require finding the underlying EditorWindow or command if parameters are needed.
+            if (parameters != null && parameters.Count > 0)
+            {
+                Debug.LogWarning($"[ExecuteMenuItem] Parameters provided but not yet supported: {parameters}");
+            }
 
             try
             {

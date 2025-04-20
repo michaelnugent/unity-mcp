@@ -18,6 +18,7 @@ UnityMcpServer.meta
 
 # Virtual environments
 .venv
+venv/
 
 # Unity Editor
 *.unitypackage

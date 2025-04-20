@@ -18,6 +18,20 @@ namespace UnityMcpBridge.Editor
     [InitializeOnLoad]
     public static partial class UnityMcpBridge
     {
+        // Add custom JSON serializer settings to handle circular references
+        private static readonly JsonSerializerSettings SerializerSettings = new JsonSerializerSettings
+        {
+            ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
+            NullValueHandling = NullValueHandling.Ignore,
+            Error = (sender, args) =>
+            {
+                Debug.LogWarning($"JSON Serialization Error: {args.ErrorContext.Error.Message}");
+                args.ErrorContext.Handled = true;
+            },
+            TypeNameHandling = TypeNameHandling.None,
+            MaxDepth = 10 // Limit serialization depth to prevent stack overflows
+        };
+
         private static TcpListener listener;
         private static bool isRunning = false;
         private static readonly object lockObj = new();
@@ -257,7 +271,7 @@ namespace UnityMcpBridge.Editor
                                 status = "error",
                                 error = "Empty command received",
                             };
-                            tcs.SetResult(JsonConvert.SerializeObject(emptyResponse));
+                            tcs.SetResult(JsonConvert.SerializeObject(emptyResponse, SerializerSettings));
                             processedIds.Add(id);
                             continue;
                         }
@@ -273,7 +287,7 @@ namespace UnityMcpBridge.Editor
                                 status = "success",
                                 result = new { message = "pong" },
                             };
-                            tcs.SetResult(JsonConvert.SerializeObject(pingResponse));
+                            tcs.SetResult(JsonConvert.SerializeObject(pingResponse, SerializerSettings));
                             processedIds.Add(id);
                             continue;
                         }
@@ -289,7 +303,7 @@ namespace UnityMcpBridge.Editor
                                     ? commandText[..50] + "..."
                                     : commandText,
                             };
-                            tcs.SetResult(JsonConvert.SerializeObject(invalidJsonResponse));
+                            tcs.SetResult(JsonConvert.SerializeObject(invalidJsonResponse, SerializerSettings));
                             processedIds.Add(id);
                             continue;
                         }
@@ -304,7 +318,7 @@ namespace UnityMcpBridge.Editor
                                 error = "Command deserialized to null",
                                 details = "The command was valid JSON but could not be deserialized to a Command object",
                             };
-                            tcs.SetResult(JsonConvert.SerializeObject(nullCommandResponse));
+                            tcs.SetResult(JsonConvert.SerializeObject(nullCommandResponse, SerializerSettings));
                         }
                         else
                         {
@@ -325,7 +339,7 @@ namespace UnityMcpBridge.Editor
                                 ? commandText[..50] + "..."
                                 : commandText,
                         };
-                        string responseJson = JsonConvert.SerializeObject(response);
+                        string responseJson = JsonConvert.SerializeObject(response, SerializerSettings);
                         tcs.SetResult(responseJson);
                     }
 
@@ -380,7 +394,7 @@ namespace UnityMcpBridge.Editor
                         error = "Command type cannot be empty",
                         details = "A valid command type is required for processing",
                     };
-                    return JsonConvert.SerializeObject(errorResponse);
+                    return JsonConvert.SerializeObject(errorResponse, SerializerSettings);
                 }
 
                 // Handle ping command for connection verification
@@ -391,7 +405,7 @@ namespace UnityMcpBridge.Editor
                         status = "success",
                         result = new { message = "pong" },
                     };
-                    return JsonConvert.SerializeObject(pingResponse);
+                    return JsonConvert.SerializeObject(pingResponse, SerializerSettings);
                 }
 
                 // Use JObject for parameters as the new handlers likely expect this
@@ -409,6 +423,7 @@ namespace UnityMcpBridge.Editor
                     "manage_asset" => ManageAsset.HandleCommand(paramsObject),
                     "read_console" => ReadConsole.HandleCommand(paramsObject),
                     "execute_menu_item" => ExecuteMenuItem.HandleCommand(paramsObject),
+                    "manage_prefabs" => ManagePrefabs.HandleCommand(paramsObject),
                     _ => throw new ArgumentException(
                         $"Unknown or unsupported command type: {command.type}"
                     ),
@@ -416,7 +431,7 @@ namespace UnityMcpBridge.Editor
 
                 // Standard success response format
                 var response = new { status = "success", result };
-                return JsonConvert.SerializeObject(response);
+                return JsonConvert.SerializeObject(response, SerializerSettings);
             }
             catch (Exception ex)
             {
@@ -436,7 +451,7 @@ namespace UnityMcpBridge.Editor
                         ? GetParamsSummary(command.@params)
                         : "No parameters", // Summarize parameters for context
                 };
-                return JsonConvert.SerializeObject(response);
+                return JsonConvert.SerializeObject(response, SerializerSettings);
             }
         }
 

@@ -21,7 +21,7 @@ namespace UnityMcpBridge.Editor.Tools
         private static readonly List<string> ValidActions = new List<string>
         {
             "import",
-            "create",
+            "create_asset",
             "modify",
             "delete",
             "duplicate",
@@ -60,7 +60,7 @@ namespace UnityMcpBridge.Editor.Tools
                     case "import":
                         // Note: Unity typically auto-imports. This might re-import or configure import settings.
                         return ReimportAsset(path, @params["properties"] as JObject);
-                    case "create":
+                    case "create_asset":
                         return CreateAsset(@params);
                     case "modify":
                         return ModifyAsset(path, @params["properties"] as JObject);
@@ -141,9 +141,9 @@ namespace UnityMcpBridge.Editor.Tools
             JObject properties = @params["properties"] as JObject;
 
             if (string.IsNullOrEmpty(path))
-                return Response.Error("'path' is required for create.");
+                return Response.Error("'path' is required for create_asset.");
             if (string.IsNullOrEmpty(assetType))
-                return Response.Error("'assetType' is required for create.");
+                return Response.Error("'assetType' is required for create_asset.");
 
             string fullPath = SanitizeAssetPath(path);
             string directory = Path.GetDirectoryName(fullPath);

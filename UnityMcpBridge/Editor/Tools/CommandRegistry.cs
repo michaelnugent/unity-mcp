@@ -34,7 +34,7 @@ namespace UnityMcpBridge.Editor.Tools
             
             // New tool handlers
             { "manage_prefabs", ManagePrefabs.HandleCommand }, // Use our new ManagePrefabs handler
-            { "manage_scenes", ManageScenes.HandleCommand }   // Use our new ManageScenes handler
+            { "manage_scenes", ManageScene.HandleCommand }   // For backward compatibility, map plural to singular
         };
 
         /// <summary>

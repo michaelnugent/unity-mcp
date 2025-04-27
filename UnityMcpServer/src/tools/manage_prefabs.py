@@ -5,6 +5,7 @@ import asyncio
 from typing import Dict, Any, Optional, List, Union, Literal, Tuple
 from mcp.server.fastmcp import FastMCP, Context
 from .base_tool import BaseTool
+from exceptions import ParameterValidationError
 
 class PrefabsTool(BaseTool):
     """Tool for managing Unity prefabs."""
@@ -143,7 +144,7 @@ class PrefabsTool(BaseTool):
             # Remove None values to avoid sending unnecessary nulls
             params_dict = {k: v for k, v in params_dict.items() if v is not None}
 
-            try:
+            try:                
                 # Send command with validation through the tool
                 return await prefabs_tool.send_command_async("manage_prefabs", params_dict)
             except ParameterValidationError as e:

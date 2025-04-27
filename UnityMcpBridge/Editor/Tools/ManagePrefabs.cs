@@ -58,6 +58,8 @@ namespace UnityMcpBridge.Editor.Tools
                 string variantName = @params["variantName"]?.ToString();
                 JObject modifiedProperties = @params["modifiedProperties"] as JObject;
 
+                Debug.Log($"[ManagePrefabs] Action: {action}");
+
                 // Route to specific action handlers
                 switch (action)
                 {

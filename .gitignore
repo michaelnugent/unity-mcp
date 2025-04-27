@@ -32,3 +32,8 @@ CONTRIBUTING.md.meta
 .idea/
 .vscode/
 .aider*
+
+# local
+plan/
+tmp/
+old/

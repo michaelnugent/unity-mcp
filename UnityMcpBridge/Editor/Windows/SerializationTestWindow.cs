@@ -150,38 +150,8 @@ namespace UnityMcpBridge.Editor.Windows
             
             try
             {
-                // Instead of directly using ToSafeJson, do the same parsing we do for scene objects
-                string objectJson = _selectedObject.ToSafeJson(_selectedDepth, false);
-                
-                // Debug logging to see the raw JSON
-                Debug.Log($"Raw JSON for {_selectedObject.name}: {objectJson.Substring(0, Mathf.Min(100, objectJson.Length))}...");
-                
-                // Create a dictionary to hold the deserialized data
-                Dictionary<string, object> objData = new Dictionary<string, object>();
-                
-                // Extract basic information
-                objData["WasFullySerialized"] = false;
-                objData["ErrorMessage"] = "";
-                objData["ObjectTypeName"] = _selectedObject.GetType().FullName;
-                objData["IsCircularReference"] = false;
-                objData["CircularReferencePath"] = "";
-                
-                // Get the fallback representation directly
-                var introspectedProps = SerializationHelper.CreateFallbackRepresentation(_selectedObject, _selectedDepth);
-                if (introspectedProps != null && introspectedProps.Count > 0)
-                {
-                    objData["IntrospectedProperties"] = introspectedProps;
-                    objData["Handler"] = introspectedProps.ContainsKey("_handlerType") ? 
-                                         introspectedProps["_handlerType"] : "None";
-                }
-                
-                // Use Newtonsoft.Json to serialize the entire structure with pretty printing if needed
-                var settings = new JsonSerializerSettings
-                { 
-                    Formatting = _prettyPrint ? Formatting.Indented : Formatting.None
-                };
-                _serializedOutput = JsonConvert.SerializeObject(objData, settings);
-                
+                // Use the exact same serialization method as the rest of the codebase
+                _serializedOutput = SerializationHelper.SafeSerializeToJson(_selectedObject, _selectedDepth, _prettyPrint);
                 Debug.Log($"Serialized GameObject '{_selectedObject.name}'.");
             }
             catch (System.Exception ex)
@@ -202,81 +172,58 @@ namespace UnityMcpBridge.Editor.Windows
             
             try
             {
-                // Create a container object to hold scene information
-                var sceneContainer = new SceneContainer
+                // Create a container for scene data
+                var sceneData = new Dictionary<string, object>
                 {
-                    SceneName = scene.name,
-                    Path = scene.path,
-                    RootObjectCount = rootObjects.Length,
-                    SerializationDepth = _selectedDepth.ToString()
+                    ["sceneName"] = scene.name,
+                    ["path"] = scene.path,
+                    ["rootObjectCount"] = rootObjects.Length,
+                    ["serializationDepth"] = _selectedDepth.ToString()
                 };
                 
-                // Serialize each root object and store results as Dictionary<string, object> to preserve the full structure
-                var objectsData = new List<Dictionary<string, object>>();
+                // Serialize each root object using the standard serialization method
+                var objectsData = new List<string>();
                 
                 foreach (var rootObject in rootObjects)
                 {
                     try
                     {
-                        // Parse the JSON to extract the full object data, including IntrospectedProperties
-                        string objectJson = rootObject.ToSafeJson(_selectedDepth, false);
-                        
-                        // Debug logging to see the raw JSON
-                        Debug.Log($"Raw JSON for {rootObject.name}: {objectJson.Substring(0, Mathf.Min(100, objectJson.Length))}...");
-                        
-                        // Create a dictionary to hold the deserialized data
-                        Dictionary<string, object> objData = new Dictionary<string, object>();
-                        
-                        // Extract whether it was fully serialized
-                        objData["WasFullySerialized"] = false;
-                        objData["ErrorMessage"] = "";
-                        objData["ObjectTypeName"] = rootObject.GetType().FullName;
-                        
-                        // Get the fallback representation directly
-                        var introspectedProps = SerializationHelper.CreateFallbackRepresentation(rootObject, _selectedDepth);
-                        if (introspectedProps != null && introspectedProps.Count > 0)
-                        {
-                            objData["IntrospectedProperties"] = introspectedProps;
-                            objData["Handler"] = introspectedProps.ContainsKey("_handlerType") ? 
-                                                 introspectedProps["_handlerType"] : "None";
-                        }
-                        
-                        objectsData.Add(objData);
+                        // Use the exact same serialization method as the rest of the codebase
+                        string objectJson = SerializationHelper.SafeSerializeToJson(rootObject, _selectedDepth, false);
+                        objectsData.Add(objectJson);
                     }
                     catch (System.Exception ex)
                     {
                         _errors.Add($"Failed to serialize {rootObject.name}: {ex.Message}");
-                        Dictionary<string, object> errorObj = new Dictionary<string, object>
-                        {
-                            ["WasFullySerialized"] = false,
-                            ["ErrorMessage"] = $"Failed to serialize {rootObject.name}: {ex.Message}",
-                            ["ObjectTypeName"] = rootObject.GetType().FullName
-                        };
-                        objectsData.Add(errorObj);
+                        objectsData.Add($"{{ \"error\": \"Failed to serialize {rootObject.name}: {ex.Message}\" }}");
                     }
                 }
+
+                // Create the final JSON
+                var jsonBuilder = new StringBuilder();
+                jsonBuilder.AppendLine("{");
+                jsonBuilder.AppendLine($"  \"scene\": {{");
+                jsonBuilder.AppendLine($"    \"sceneName\": \"{scene.name}\",");
+                jsonBuilder.AppendLine($"    \"path\": \"{scene.path}\",");
+                jsonBuilder.AppendLine($"    \"rootObjectCount\": {rootObjects.Length},");
+                jsonBuilder.AppendLine($"    \"serializationDepth\": \"{_selectedDepth}\",");
+                jsonBuilder.AppendLine($"    \"objects\": [");
                 
-                // Convert the dictionaries to JSON
-                var settings = new JsonSerializerSettings
-                { 
-                    Formatting = _prettyPrint ? Formatting.Indented : Formatting.None
-                };
-                
-                // Create the scene container JSON
-                var sceneJson = new Dictionary<string, object>
+                for (int i = 0; i < objectsData.Count; i++)
                 {
-                    ["scene"] = new Dictionary<string, object>
-                    {
-                        ["sceneName"] = sceneContainer.SceneName,
-                        ["path"] = sceneContainer.Path,
-                        ["rootObjectCount"] = sceneContainer.RootObjectCount,
-                        ["serializationDepth"] = sceneContainer.SerializationDepth,
-                        ["objects"] = objectsData
-                    }
-                };
+                    jsonBuilder.Append("      ");
+                    jsonBuilder.Append(objectsData[i]);
+                    if (i < objectsData.Count - 1)
+                        jsonBuilder.AppendLine(",");
+                    else
+                        jsonBuilder.AppendLine();
+                }
                 
-                // Use Newtonsoft.Json to serialize the entire structure
-                _serializedOutput = JsonConvert.SerializeObject(sceneJson, settings);
+                jsonBuilder.AppendLine("    ]");
+                jsonBuilder.AppendLine("  }");
+                jsonBuilder.AppendLine("}");
+                
+                _serializedOutput = _prettyPrint ? jsonBuilder.ToString() : jsonBuilder.ToString().Replace("\n", "").Replace("  ", "");
                 
                 Debug.Log($"Serialized scene '{scene.name}' with {rootObjects.Length} root objects.");
             }
@@ -301,15 +248,6 @@ namespace UnityMcpBridge.Editor.Windows
                 File.WriteAllText(path, _serializedOutput);
                 Debug.Log($"Serialized data saved to {path}");
             }
-        }
-
-        // Simple container for scene information
-        private class SceneContainer
-        {
-            public string SceneName { get; set; }
-            public string Path { get; set; }
-            public int RootObjectCount { get; set; }
-            public string SerializationDepth { get; set; }
         }
     }
 } 

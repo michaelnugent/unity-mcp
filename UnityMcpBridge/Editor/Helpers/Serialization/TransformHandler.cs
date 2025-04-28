@@ -18,9 +18,9 @@ namespace UnityMcpBridge.Editor.Helpers.Serialization
         /// Serializes a Transform object into a dictionary representation.
         /// </summary>
         /// <param name="obj">The Transform to serialize</param>
-        /// <param name="depth">The maximum depth to traverse when serializing nested objects</param>
+        /// <param name="depth">The serialization depth to use when serializing properties</param>
         /// <returns>A dictionary containing the Transform's serialized properties</returns>
-        public Dictionary<string, object> Serialize(object obj, int depth = 1)
+        public Dictionary<string, object> Serialize(object obj, SerializationHelper.SerializationDepth depth = SerializationHelper.SerializationDepth.Standard)
         {
             if (obj == null)
                 return null;
@@ -28,7 +28,19 @@ namespace UnityMcpBridge.Editor.Helpers.Serialization
             if (!(obj is Transform transform))
                 throw new ArgumentException($"Object is not a Transform: {obj.GetType().Name}");
 
-            var result = new Dictionary<string, object>();
+            var result = new Dictionary<string, object>
+            {
+                ["__type"] = transform.GetType().FullName,
+                ["__object_id"] = transform.GetInstanceID()
+            };
+
+            // For Basic depth, just return type info and minimal data
+            if (depth == SerializationHelper.SerializationDepth.Basic)
+            {
+                result["name"] = transform.name;
+                result["gameObject"] = transform.gameObject.GetInstanceID();
+                return result;
+            }
 
             // Local position, rotation, and scale
             result["localPosition"] = SerializeVector3(transform.localPosition);
@@ -47,7 +59,7 @@ namespace UnityMcpBridge.Editor.Helpers.Serialization
                 result["hasParent"] = true;
                 result["parentName"] = transform.parent.name;
                 
-                if (depth > 0)
+                if (depth != SerializationHelper.SerializationDepth.Basic)
                 {
                     try
                     {
@@ -72,7 +84,7 @@ namespace UnityMcpBridge.Editor.Helpers.Serialization
             result["childCount"] = transform.childCount;
 
             // Serialize children if depth allows
-            if (depth > 0 && transform.childCount > 0)
+            if (depth == SerializationHelper.SerializationDepth.Deep && transform.childCount > 0)
             {
                 var children = new List<Dictionary<string, object>>();
                 
@@ -88,10 +100,11 @@ namespace UnityMcpBridge.Editor.Helpers.Serialization
                         ["instanceID"] = child.gameObject.GetInstanceID()
                     };
                     
-                    // Only go deeper if we have more depth available
-                    if (depth > 1)
+                    // For Deep serialization, include more details about children
+                    if (depth == SerializationHelper.SerializationDepth.Deep)
                     {
-                        childData = Serialize(child, depth - 1);
+                        // Use Standard depth for children to avoid too much nesting
+                        childData = Serialize(child, SerializationHelper.SerializationDepth.Standard);
                     }
                     
                     children.Add(childData);
@@ -129,6 +142,8 @@ namespace UnityMcpBridge.Editor.Helpers.Serialization
 
         private Dictionary<string, float> SerializeVector3(Vector3 vector)
         {
+            // Only serialize the x, y, z values to avoid self-referencing loops
+            // Don't access properties like normalized which returns a new Vector3
             return new Dictionary<string, float>
             {
                 ["x"] = vector.x,

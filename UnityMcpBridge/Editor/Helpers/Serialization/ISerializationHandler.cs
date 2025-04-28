@@ -17,8 +17,8 @@ namespace UnityMcpBridge.Editor.Helpers.Serialization
         /// Serializes an object to a dictionary representation.
         /// </summary>
         /// <param name="obj">The object to serialize</param>
-        /// <param name="depth">The maximum depth to traverse when serializing nested objects</param>
+        /// <param name="depth">The serialization depth to use</param>
         /// <returns>A dictionary representation of the object</returns>
-        Dictionary<string, object> Serialize(object obj, int depth = 1);
+        Dictionary<string, object> Serialize(object obj, SerializationHelper.SerializationDepth depth = SerializationHelper.SerializationDepth.Standard);
     }
 } 

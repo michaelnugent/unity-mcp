@@ -19,9 +19,9 @@ namespace UnityMcpBridge.Editor.Helpers.Serialization
         /// Serializes a GameObject object into a dictionary representation.
         /// </summary>
         /// <param name="obj">The GameObject to serialize</param>
-        /// <param name="depth">The maximum depth to traverse when serializing nested objects</param>
+        /// <param name="depth">The serialization depth to use</param>
         /// <returns>A dictionary containing the GameObject's serialized properties</returns>
-        public Dictionary<string, object> Serialize(object obj, int depth = 1)
+        public Dictionary<string, object> Serialize(object obj, SerializationHelper.SerializationDepth depth = SerializationHelper.SerializationDepth.Standard)
         {
             if (obj == null)
                 return null;
@@ -37,25 +37,47 @@ namespace UnityMcpBridge.Editor.Helpers.Serialization
                 ["layer"] = gameObject.layer,
                 ["layerName"] = LayerMask.LayerToName(gameObject.layer),
                 ["instanceID"] = gameObject.GetInstanceID(),
-                ["isStatic"] = gameObject.isStatic
+                ["isStatic"] = gameObject.isStatic,
+                ["__type"] = typeof(GameObject).FullName,
+                ["__object_id"] = gameObject.GetInstanceID().ToString(),
+                ["hierarchyPath"] = GetHierarchyPath(gameObject)
             };
 
-            // Add transform data (position, rotation, scale)
+            // Add transform data (position, rotation, scale) for all depth levels
             result["transform"] = SerializeTransform(gameObject.transform);
 
-            // Add component data if depth allows
-            if (depth > 0)
+            // For Basic depth, we're done here
+            if (depth == SerializationHelper.SerializationDepth.Basic)
             {
-                SerializeComponents(gameObject, result, depth - 1);
+                return result;
             }
 
-            // Add children data if depth allows
-            if (depth > 0)
-            {
-                SerializeChildren(gameObject, result, depth - 1);
-            }
+            // Add component data for Standard and Deep depths
+            SerializeComponents(gameObject, result, depth);
+
+            // Add children data for Standard and Deep depths
+            // For Standard depth, we include minimal child info
+            // For Deep depth, we recursively serialize all children
+            SerializeChildren(gameObject, result, depth);
 
             return result;
+        }
+
+        /// <summary>
+        /// Gets the full hierarchy path for a GameObject.
+        /// </summary>
+        private string GetHierarchyPath(GameObject gameObject)
+        {
+            var transform = gameObject.transform;
+            string path = gameObject.name;
+            
+            while (transform.parent != null)
+            {
+                transform = transform.parent;
+                path = transform.name + "/" + path;
+            }
+            
+            return path;
         }
 
         /// <summary>
@@ -85,6 +107,7 @@ namespace UnityMcpBridge.Editor.Helpers.Serialization
             if (transform.parent != null)
             {
                 result["parentName"] = transform.parent.name;
+                result["parentID"] = transform.parent.gameObject.GetInstanceID();
             }
 
             return result;
@@ -95,8 +118,8 @@ namespace UnityMcpBridge.Editor.Helpers.Serialization
         /// </summary>
         /// <param name="gameObject">The GameObject containing the components</param>
         /// <param name="result">The dictionary to add component data to</param>
-        /// <param name="depth">The remaining depth for nested serialization</param>
-        private void SerializeComponents(GameObject gameObject, Dictionary<string, object> result, int depth)
+        /// <param name="depth">The serialization depth to use</param>
+        private void SerializeComponents(GameObject gameObject, Dictionary<string, object> result, SerializationHelper.SerializationDepth depth)
         {
             var components = gameObject.GetComponents<Component>();
             var componentData = new List<Dictionary<string, object>>();
@@ -115,7 +138,12 @@ namespace UnityMcpBridge.Editor.Helpers.Serialization
 
                 try
                 {
-                    var serializedComponent = componentHandler.Serialize(component, depth);
+                    // For Standard depth, use reduced depth for components
+                    var componentDepth = depth == SerializationHelper.SerializationDepth.Deep 
+                        ? depth 
+                        : SerializationHelper.SerializationDepth.Basic;
+                    
+                    var serializedComponent = componentHandler.Serialize(component, componentDepth);
                     if (serializedComponent != null)
                     {
                         componentData.Add(serializedComponent);
@@ -136,8 +164,8 @@ namespace UnityMcpBridge.Editor.Helpers.Serialization
         /// </summary>
         /// <param name="gameObject">The GameObject containing the children</param>
         /// <param name="result">The dictionary to add children data to</param>
-        /// <param name="depth">The remaining depth for nested serialization</param>
-        private void SerializeChildren(GameObject gameObject, Dictionary<string, object> result, int depth)
+        /// <param name="depth">The serialization depth to use</param>
+        private void SerializeChildren(GameObject gameObject, Dictionary<string, object> result, SerializationHelper.SerializationDepth depth)
         {
             var transform = gameObject.transform;
             
@@ -151,19 +179,25 @@ namespace UnityMcpBridge.Editor.Helpers.Serialization
                 var childTransform = transform.GetChild(i);
                 var childGameObject = childTransform.gameObject;
 
-                // For child objects, we create simplified data to avoid huge output
-                var childData = new Dictionary<string, object>
+                Dictionary<string, object> childData;
+                
+                if (depth == SerializationHelper.SerializationDepth.Deep)
                 {
-                    ["name"] = childGameObject.name,
-                    ["active"] = childGameObject.activeSelf,
-                    ["tag"] = childGameObject.tag,
-                    ["instanceID"] = childGameObject.GetInstanceID()
-                };
-
-                // Add more detailed data if further depth is allowed
-                if (depth > 0)
+                    // For Deep depth, fully serialize child
+                    childData = Serialize(childGameObject, SerializationHelper.SerializationDepth.Standard);
+                }
+                else
                 {
-                    childData = Serialize(childGameObject, depth - 1);
+                    // For Standard depth, create minimal data
+                    childData = new Dictionary<string, object>
+                    {
+                        ["name"] = childGameObject.name,
+                        ["active"] = childGameObject.activeSelf,
+                        ["tag"] = childGameObject.tag,
+                        ["instanceID"] = childGameObject.GetInstanceID(),
+                        ["__type"] = typeof(GameObject).FullName,
+                        ["childCount"] = childTransform.childCount
+                    };
                 }
 
                 childrenData.Add(childData);

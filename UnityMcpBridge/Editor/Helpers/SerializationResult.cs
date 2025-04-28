@@ -50,5 +50,50 @@ namespace UnityMcpBridge.Editor.Helpers
         /// Only present if IsCircularReference is true.
         /// </summary>
         public string CircularReferencePath;
+        
+        /// <summary>
+        /// Status of the serialization process. Helps LLMs understand what happened during serialization.
+        /// </summary>
+        public string __serialization_status;
+        
+        /// <summary>
+        /// Detailed error information if serialization encountered problems.
+        /// </summary>
+        public string __serialization_error;
+        
+        /// <summary>
+        /// The depth level used for this serialization.
+        /// </summary>
+        public string __serialization_depth;
+        
+        /// <summary>
+        /// List of successfully serialized properties.
+        /// </summary>
+        public List<string> __serialized_properties;
+        
+        /// <summary>
+        /// List of properties that could not be serialized.
+        /// </summary>
+        public List<string> __failed_properties;
+        
+        /// <summary>
+        /// Object identifier that can be used to uniquely reference this object.
+        /// </summary>
+        public string __object_id;
+        
+        /// <summary>
+        /// Assembly qualified name of the object type for more precise type information.
+        /// </summary>
+        public string __assembly_qualified_name;
+        
+        /// <summary>
+        /// Names of interfaces implemented by this object type.
+        /// </summary>
+        public List<string> __implemented_interfaces;
+        
+        /// <summary>
+        /// Base type information for class hierarchy understanding.
+        /// </summary>
+        public string __base_type;
     }
 } 

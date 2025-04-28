@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using UnityEngine;
 using UnityMcpBridge.Editor.Helpers.Serialization;
@@ -189,104 +190,132 @@ namespace UnityMcpBridge.Editor.Helpers
                 {
                     WasFullySerialized = true,
                     ObjectTypeName = "null",
-                    Data = null
+                    Data = null,
+                    __serialization_status = "success",
+                    __serialization_depth = depth.ToString()
                 };
             }
 
             Type objType = obj.GetType();
             var result = new SerializationResult<object>
             {
-                ObjectTypeName = objType.FullName
+                ObjectTypeName = objType.FullName,
+                __serialization_depth = depth.ToString(),
+                __object_id = obj is UnityEngine.Object unityObj ? unityObj.GetInstanceID().ToString() : Guid.NewGuid().ToString(),
+                __assembly_qualified_name = objType.AssemblyQualifiedName,
+                __base_type = objType.BaseType?.FullName,
+                __implemented_interfaces = objType.GetInterfaces().Select(i => i.FullName).ToList(),
+                __serialized_properties = new List<string>(),
+                __failed_properties = new List<string>()
             };
+            
+            // Check for Unity Object type
+            if (obj is UnityEngine.Object unityObject)
+            {
+                result.InstanceID = unityObject.GetInstanceID();
+            }
 
             // Check for circular references
-            if (_referenceTracker.IsCircularReference(obj))
+            string referencePath = _referenceTracker.GetReferencePath(obj);
+            if (referencePath != null)
             {
-                // This is a circular reference, create a reference placeholder
+                // This is a circular reference, so we'll return a reference to the original instance
                 result.IsCircularReference = true;
-                result.CircularReferencePath = _referenceTracker.GetReferencePath(obj);
-                result.WasFullySerialized = false;
-                
-                // For Unity objects, still include the instance ID
-                if (obj is UnityObject unityObject)
-                {
-                    result.InstanceID = unityObject.GetInstanceID();
-                }
-                
+                result.CircularReferencePath = referencePath;
+                result.__serialization_status = "circular_reference";
                 return result;
             }
             
             // Add this object to the reference tracker
             _referenceTracker.AddReference(obj);
-
-            // Handle Unity Object specially
-            if (obj is UnityObject unityObj)
+            
+            try
             {
-                result.InstanceID = unityObj.GetInstanceID();
-                
-                // For now, Unity objects need fallback representation
-                result.WasFullySerialized = false;
-                result.Data = null;
-                
-                // Enter context for nested serialization
-                _referenceTracker.EnterContext(objType.Name);
-                result.IntrospectedProperties = CreateFallbackRepresentation(unityObj, depth);
-                _referenceTracker.ExitContext();
-                
-                return result;
-            }
-
-            // Check if we have a custom serializer for this type
-            if (_customSerializers.TryGetValue(objType, out var serializer))
-            {
-                // Enter context for nested serialization
-                _referenceTracker.EnterContext(objType.Name);
-                result.Data = serializer(obj, depth);
-                _referenceTracker.ExitContext();
-                
-                result.WasFullySerialized = true;
-                return result;
-            }
-
-            if (IsDirectlySerializable(obj))
-            {
-                try
+                // First, try to use a specialized handler if available
+                bool handlerUsed = false;
+                ISerializationHandler handler = SerializationHandlerRegistry.GetHandler(objType);
+                if (handler != null)
                 {
-                    // For directly serializable objects, we can just use the object as data
+                    try
+                    {
+                        Dictionary<string, object> handlerResult = handler.Serialize(obj, depth);
+                        result.IntrospectedProperties = handlerResult;
+                        result.WasFullySerialized = true;
+                        handlerUsed = true;
+                        result.__serialization_status = "success_with_handler";
+                        
+                        // Record serialized properties
+                        if (handlerResult != null)
+                        {
+                            result.__serialized_properties.AddRange(handlerResult.Keys);
+                        }
+                    }
+                    catch (Exception handlerEx)
+                    {
+                        Debug.LogWarning($"Serialization handler for {objType.Name} failed: {handlerEx.Message}");
+                        // Fall back to standard serialization if handler fails
+                        handlerUsed = false;
+                        result.__serialization_error = $"Handler error: {handlerEx.Message}";
+                    }
+                }
+                
+                // If no handler or handler failed, try direct serialization for simple types
+                if (!handlerUsed && IsDirectlySerializable(obj))
+                {
                     result.Data = obj;
                     result.WasFullySerialized = true;
+                    result.__serialization_status = "success_direct";
+                    return result;
                 }
-                catch
-                {
-                    // If direct serialization fails, fall back to reflection
-                    result.WasFullySerialized = false;
-                    result.Data = null;
-                    
-                    // Enter context for nested serialization
-                    _referenceTracker.EnterContext(objType.Name);
-                    result.IntrospectedProperties = CreateFallbackRepresentation(obj, depth);
-                    _referenceTracker.ExitContext();
-                }
-            }
-            else
-            {
-                // Object is not directly serializable, use fallback representation
-                result.WasFullySerialized = false;
-                result.Data = null;
                 
-                // Enter context for nested serialization
-                _referenceTracker.EnterContext(objType.Name);
-                result.IntrospectedProperties = CreateFallbackRepresentation(obj, depth);
-                _referenceTracker.ExitContext();
+                // If we get here and haven't used a handler, use reflection as a fallback
+                if (!handlerUsed)
+                {
+                    // Use reflection to gather properties
+                    var properties = CreateFallbackRepresentation(obj, depth);
+                    result.IntrospectedProperties = properties;
+                    result.WasFullySerialized = false;
+                    result.__serialization_status = "fallback_reflection";
+                    
+                    // Record serialized properties
+                    if (properties != null)
+                    {
+                        result.__serialized_properties.AddRange(properties.Keys);
+                    }
+                }
+                
+                return result;
             }
-
-            return result;
+            catch (Exception ex)
+            {
+                // Handle any unexpected errors
+                result.WasFullySerialized = false;
+                result.ErrorMessage = $"Serialization failed: {ex.Message}";
+                result.__serialization_status = "error";
+                result.__serialization_error = ex.ToString();
+                return result;
+            }
+            finally
+            {
+                // We don't need to remove the reference as the CircularReferenceTracker will be cleared later
+                // No RemoveReference call here
+            }
         }
 
         /// <summary>
-        /// Creates a dictionary representation of an object using reflection.
+        /// Creates a dictionary representation of an object through reflection.
+        /// Used as a fallback when direct serialization is not possible.
         /// </summary>
-        public static Dictionary<string, object> CreateFallbackRepresentation(object obj, SerializationDepth depth)
+        /// <param name="obj">The object to create a fallback representation for</param>
+        /// <param name="depth">The depth of serialization to perform</param>
+        /// <param name="successList">List to track successfully serialized properties</param>
+        /// <param name="failureList">List to track properties that couldn't be serialized</param>
+        /// <returns>A dictionary representation of the object</returns>
+        public static Dictionary<string, object> CreateFallbackRepresentation(
+            object obj, 
+            SerializationDepth depth,
+            List<string> successList = null,
+            List<string> failureList = null)
         {
             if (obj == null)
             {
@@ -295,292 +324,445 @@ namespace UnityMcpBridge.Editor.Helpers
 
             var result = new Dictionary<string, object>();
             Type objType = obj.GetType();
+            
+            // Special handling for Unity vector types to avoid circular references
+            if (obj is Vector3 vector3)
+            {
+                return new Dictionary<string, object>
+                {
+                    ["__type"] = "UnityEngine.Vector3",
+                    ["x"] = vector3.x,
+                    ["y"] = vector3.y,
+                    ["z"] = vector3.z
+                };
+            }
+            else if (obj is Vector2 vector2)
+            {
+                return new Dictionary<string, object>
+                {
+                    ["__type"] = "UnityEngine.Vector2",
+                    ["x"] = vector2.x,
+                    ["y"] = vector2.y
+                };
+            }
+            else if (obj is Vector4 vector4)
+            {
+                return new Dictionary<string, object>
+                {
+                    ["__type"] = "UnityEngine.Vector4",
+                    ["x"] = vector4.x,
+                    ["y"] = vector4.y,
+                    ["z"] = vector4.z,
+                    ["w"] = vector4.w
+                };
+            }
+            else if (obj is Quaternion quaternion)
+            {
+                return new Dictionary<string, object>
+                {
+                    ["__type"] = "UnityEngine.Quaternion",
+                    ["x"] = quaternion.x,
+                    ["y"] = quaternion.y,
+                    ["z"] = quaternion.z,
+                    ["w"] = quaternion.w
+                };
+            }
+            
+            // Always add type information regardless of depth
+            result["__type"] = objType.FullName;
+            
+            // Add Unity object instance ID if applicable
+            if (obj is UnityObject unityObj)
+            {
+                result["__instanceId"] = unityObj.GetInstanceID();
+                result["__name"] = unityObj.name;
+            }
 
-            // Check if there's a specialized handler for this type
-            if (SerializationHandlerRegistry.TryGetHandler(objType, out var handler))
+            // For Basic depth, we just return minimal info
+            if (depth == SerializationDepth.Basic)
+            {
+                if (successList != null)
+                {
+                    successList.Add("__type");
+                    if (obj is UnityObject)
+                    {
+                        successList.Add("__instanceId");
+                        successList.Add("__name");
+                    }
+                }
+                return result;
+            }
+            
+            // Special handling for Unity GameObject
+            if (obj is GameObject gameObject)
+            {
+                ExtractGameObjectProperties(gameObject, result, depth);
+                if (successList != null)
+                {
+                    successList.Add("transform");
+                    successList.Add("components");
+                    successList.Add("children");
+                    successList.Add("isActive");
+                    successList.Add("tag");
+                    successList.Add("layer");
+                }
+                return result;
+            }
+            
+            // Special handling for Unity Component
+            if (obj is Component component)
+            {
+                ExtractComponentProperties(component, result, depth);
+                if (successList != null)
+                {
+                    successList.Add("gameObject");
+                    successList.Add("enabled");
+                }
+                return result;
+            }
+
+            // Process properties using reflection
+            foreach (var property in objType.GetProperties())
+            {
+                // Skip indexers and properties with non-public getters
+                if (property.GetIndexParameters().Length > 0 || 
+                    property.GetGetMethod() == null || 
+                    !property.GetGetMethod().IsPublic)
+                {
+                    continue;
+                }
+
+                string name = property.Name;
+                
+                // Extract property value with error handling
+                ExtractValue(obj, name, () => property.GetValue(obj), result, depth, successList, failureList);
+            }
+
+            // Process fields using reflection (for standard and deep only)
+            if (depth > SerializationDepth.Basic)
+            {
+                foreach (var field in objType.GetFields())
+                {
+                    // Skip non-public fields
+                    if (!field.IsPublic)
+                    {
+                        continue;
+                    }
+
+                    string name = field.Name;
+                    
+                    // Extract field value with error handling
+                    ExtractValue(obj, name, () => field.GetValue(obj), result, depth, successList, failureList);
+                }
+            }
+
+            // Handle collections specially
+            if (obj is ICollection collection && depth > SerializationDepth.Basic)
             {
                 try
                 {
-                    int depthValue = (int)depth;
-                    return handler.Serialize(obj, depthValue);
+                    if (depth > SerializationDepth.Basic)
+                    {
+                        result["__count"] = collection.Count;
+                        if (successList != null) successList.Add("__count");
+                    }
+                    
+                    // For arrays and lists, try to extract items
+                    if (obj is IList list)
+                    {
+                        var items = new List<object>();
+                        for (int i = 0; i < list.Count; i++)
+                        {
+                            try
+                            {
+                                object item = list[i];
+                                if (depth > SerializationDepth.Standard || IsDirectlySerializable(item))
+                                {
+                                    items.Add(ProcessValue(item, depth));
+                                    if (successList != null) successList.Add($"items[{i}]");
+                                }
+                                else
+                                {
+                                    // For complex items in Standard depth, just add type info
+                                    items.Add(new Dictionary<string, object> { 
+                                        ["__type"] = item?.GetType().FullName ?? "null",
+                                        ["__toString"] = item?.ToString() ?? "null" 
+                                    });
+                                    if (failureList != null) failureList.Add($"items[{i}]");
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                items.Add($"Error accessing item {i}: {ex.Message}");
+                                if (failureList != null) failureList.Add($"items[{i}]");
+                            }
+                        }
+                        result["__items"] = items;
+                        if (successList != null) successList.Add("__items");
+                    }
                 }
                 catch (Exception ex)
                 {
-                    // If handler fails, fall back to general reflection approach
-                    result["__handler_error"] = $"Handler failed: {ex.Message}";
+                    result["__collection_error"] = ex.Message;
+                    if (failureList != null) failureList.Add("__collection");
                 }
             }
 
-            // Add specialized handling for common types
-            if (obj is GameObject gameObject)
-            {
-                // Special handling for GameObjects to extract key information
-                ExtractGameObjectProperties(gameObject, result, depth);
-                return result;
-            }
-            
-            if (obj is Component component)
-            {
-                // Special handling for Components to extract key information
-                ExtractComponentProperties(component, result, depth);
-                return result;
-            }
-
-            // Add type information
-            result["__type"] = objType.FullName;
-            
-            // For arrays, extract simple array representation
-            if (objType.IsArray)
-            {
-                var array = obj as Array;
-                result["__array_length"] = array.Length;
-                result["__array_type"] = objType.GetElementType().FullName;
-                
-                // Only extract elements if we have remaining depth
-                if (depth > SerializationDepth.Basic)
-                {
-                    var elements = new List<object>();
-                    for (int i = 0; i < array.Length; i++)
-                    {
-                        var element = array.GetValue(i);
-                        
-                        // Check for circular references in array elements
-                        _referenceTracker.EnterContext($"[{i}]");
-                        if (_referenceTracker.IsCircularReference(element))
-                        {
-                            elements.Add(new Dictionary<string, object>
-                            {
-                                ["__circular_reference"] = true,
-                                ["__reference_path"] = _referenceTracker.GetReferencePath(element)
-                            });
-                        }
-                        else if (_referenceTracker.AddReference(element))
-                        {
-                            if (depth > SerializationDepth.Standard || IsDirectlySerializable(element))
-                            {
-                                elements.Add(ProcessValue(element, depth));
-                            }
-                            else
-                            {
-                                elements.Add($"{element?.GetType()?.Name ?? "null"}: {element}");
-                            }
-                        }
-                        _referenceTracker.ExitContext();
-                    }
-                    result["elements"] = elements;
-                }
-                
-                return result;
-            }
-            
-            // For collections, extract elements
-            if (obj is ICollection collection && depth > SerializationDepth.Basic)
-            {
-                result["__collection_count"] = collection.Count;
-                
-                // Extract elements if we're deep enough
-                if (depth > SerializationDepth.Basic)
-                {
-                    var elements = new List<object>();
-                    int index = 0;
-                    foreach (var item in collection)
-                    {
-                        // Check for circular references in collection elements
-                        _referenceTracker.EnterContext($"[{index}]");
-                        if (_referenceTracker.IsCircularReference(item))
-                        {
-                            elements.Add(new Dictionary<string, object>
-                            {
-                                ["__circular_reference"] = true,
-                                ["__reference_path"] = _referenceTracker.GetReferencePath(item)
-                            });
-                        }
-                        else if (_referenceTracker.AddReference(item))
-                        {
-                            if (depth > SerializationDepth.Standard || IsDirectlySerializable(item))
-                            {
-                                elements.Add(ProcessValue(item, depth));
-                            }
-                            else
-                            {
-                                elements.Add($"{item?.GetType()?.Name ?? "null"}: {item}");
-                            }
-                        }
-                        _referenceTracker.ExitContext();
-                        index++;
-                    }
-                    result["elements"] = elements;
-                }
-            }
-            
-            // For dictionaries, extract keys and values
+            // Handle dictionaries specially
             if (obj is IDictionary dictionary && depth > SerializationDepth.Basic)
             {
-                result["__dictionary_count"] = dictionary.Count;
-                
-                if (depth > SerializationDepth.Basic)
+                try
                 {
-                    var entries = new List<Dictionary<string, object>>();
-                    
-                    foreach (DictionaryEntry entry in dictionary)
+                    if (depth > SerializationDepth.Basic)
                     {
-                        var entryData = new Dictionary<string, object>();
-                        
-                        // Process the key
-                        _referenceTracker.EnterContext($"key_{entry.Key}");
-                        if (_referenceTracker.IsCircularReference(entry.Key))
-                        {
-                            entryData["key"] = new Dictionary<string, object>
-                            {
-                                ["__circular_reference"] = true,
-                                ["__reference_path"] = _referenceTracker.GetReferencePath(entry.Key)
-                            };
-                        }
-                        else if (_referenceTracker.AddReference(entry.Key))
-                        {
-                            entryData["key"] = ProcessValue(entry.Key, depth);
-                        }
-                        _referenceTracker.ExitContext();
-                        
-                        // Process the value
-                        _referenceTracker.EnterContext($"value_{entry.Key}");
-                        if (_referenceTracker.IsCircularReference(entry.Value))
-                        {
-                            entryData["value"] = new Dictionary<string, object>
-                            {
-                                ["__circular_reference"] = true,
-                                ["__reference_path"] = _referenceTracker.GetReferencePath(entry.Value)
-                            };
-                        }
-                        else if (_referenceTracker.AddReference(entry.Value))
-                        {
-                            entryData["value"] = ProcessValue(entry.Value, depth);
-                        }
-                        _referenceTracker.ExitContext();
-                        
-                        entries.Add(entryData);
+                        result["__count"] = dictionary.Count;
+                        if (successList != null) successList.Add("__count");
                     }
                     
-                    result["entries"] = entries;
+                    var entries = new Dictionary<object, object>();
+                    foreach (var key in dictionary.Keys)
+                    {
+                        try
+                        {
+                            object value = dictionary[key];
+                            string keyString = key?.ToString() ?? "null";
+                            
+                            if (depth > SerializationDepth.Standard || IsDirectlySerializable(value))
+                            {
+                                entries[keyString] = ProcessValue(value, depth);
+                                if (successList != null) successList.Add($"entries[{keyString}]");
+                            }
+                            else
+                            {
+                                // For complex values in Standard depth, just add type info
+                                entries[keyString] = new Dictionary<string, object> { 
+                                    ["__type"] = value?.GetType().FullName ?? "null",
+                                    ["__toString"] = value?.ToString() ?? "null" 
+                                };
+                                if (failureList != null) failureList.Add($"entries[{keyString}]");
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            entries[key?.ToString() ?? "null"] = $"Error accessing value: {ex.Message}";
+                            if (failureList != null) failureList.Add($"entries[{key?.ToString() ?? "null"}]");
+                        }
+                    }
+                    result["__entries"] = entries;
+                    if (successList != null) successList.Add("__entries");
+                }
+                catch (Exception ex)
+                {
+                    result["__dictionary_error"] = ex.Message;
+                    if (failureList != null) failureList.Add("__dictionary");
                 }
             }
 
-            // Use reflection to get properties
-            if (depth >= SerializationDepth.Basic)
+            // For Deep serialization, try to add additional context
+            if (depth >= SerializationDepth.Deep)
             {
-                // Get all public properties with getters
-                foreach (var prop in objType.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+                try
                 {
-                    try
+                    result["__toString"] = obj.ToString();
+                    if (successList != null) successList.Add("__toString");
+                    
+                    // Add hash code as a consistent identifier
+                    result["__hashcode"] = obj.GetHashCode();
+                    if (successList != null) successList.Add("__hashcode");
+                    
+                    // Add type hierarchy information
+                    var baseTypes = new List<string>();
+                    var baseType = objType.BaseType;
+                    while (baseType != null && baseType != typeof(object))
                     {
-                        if (prop.CanRead && prop.GetIndexParameters().Length == 0)
-                        {
-                            ExtractValue(obj, prop.Name, () => prop.GetValue(obj, null), result, depth);
-                        }
+                        baseTypes.Add(baseType.FullName);
+                        baseType = baseType.BaseType;
                     }
-                    catch (Exception ex)
-                    {
-                        // Skip problematic properties but record the error
-                        result[$"__error_{prop.Name}"] = $"Property access failed: {ex.Message}";
-                    }
+                    result["__baseTypes"] = baseTypes;
+                    if (successList != null) successList.Add("__baseTypes");
+                    
+                    // Add interface information
+                    result["__interfaces"] = objType.GetInterfaces().Select(i => i.FullName).ToArray();
+                    if (successList != null) successList.Add("__interfaces");
                 }
-                
-                // Get all public fields
-                foreach (var field in objType.GetFields(BindingFlags.Public | BindingFlags.Instance))
+                catch (Exception ex)
                 {
-                    try
-                    {
-                        ExtractValue(obj, field.Name, () => field.GetValue(obj), result, depth);
-                    }
-                    catch (Exception ex)
-                    {
-                        // Skip problematic fields but record the error
-                        result[$"__error_{field.Name}"] = $"Field access failed: {ex.Message}";
-                    }
+                    result["__deep_info_error"] = ex.Message;
+                    if (failureList != null) failureList.Add("__deep_info");
                 }
             }
-            
+
             return result;
         }
 
-        private static void ExtractValue(object obj, string name, Func<object> getValue, Dictionary<string, object> result, SerializationDepth depth)
+        private static void ExtractValue(object obj, string name, Func<object> getValue, Dictionary<string, object> result, SerializationDepth depth, List<string> successList = null, List<string> failureList = null)
         {
             try
             {
-                var value = getValue();
-                
-                // Enter context for the property/field
-                _referenceTracker.EnterContext(name);
-                
-                // Check for circular references
-                if (_referenceTracker.IsCircularReference(value))
+                object value = getValue();
+                if (value == null)
                 {
+                    result[name] = null;
+                    if (successList != null) successList.Add(name);
+                    return;
+                }
+
+                // Check for circular references
+                string referencePath = _referenceTracker.GetReferencePath(value);
+                if (referencePath != null)
+                {
+                    // This is a circular reference
                     result[name] = new Dictionary<string, object>
                     {
                         ["__circular_reference"] = true,
-                        ["__reference_path"] = _referenceTracker.GetReferencePath(value)
+                        ["__reference_path"] = referencePath,
+                        ["__type"] = value.GetType().FullName
                     };
+                    if (successList != null) successList.Add(name);
+                    return;
                 }
-                else if (_referenceTracker.AddReference(value))
-                {
-                    result[name] = ProcessValue(value, depth);
-                }
+
+                // Add reference for this value
+                _referenceTracker.AddReference(value);
                 
-                // Exit context
-                _referenceTracker.ExitContext();
+                try
+                {
+                    // Process the value based on depth
+                    result[name] = ProcessValue(value, depth);
+                    if (successList != null) successList.Add(name);
+                }
+                finally
+                {
+                    // We don't need to remove reference as the CircularReferenceTracker will be cleared later
+                    // No RemoveReference call here
+                }
             }
             catch (Exception ex)
             {
-                // Record the error but don't fail the entire serialization
-                result[$"__error_{name}"] = $"Value extraction failed: {ex.Message}";
+                // Record the error but don't fail the whole serialization
+                result[$"__error_{name}"] = ex.Message;
+                if (failureList != null) failureList.Add(name);
             }
         }
         
         /// <summary>
-        /// Processes a value for serialization based on its type and the serialization depth.
+        /// Processes a value for serialization based on its type and the current depth.
         /// </summary>
         private static object ProcessValue(object value, SerializationDepth depth)
         {
             if (value == null)
-            {
                 return null;
+                
+            var valueType = value.GetType();
+            
+            // Special handling for Unity objects
+            if (value is UnityObject unityObj)
+            {
+                // For Unity objects, use specialized processing based on depth
+                if (depth == SerializationDepth.Basic)
+                {
+                    // Just return minimal information for Basic depth
+                    return new Dictionary<string, object>
+                    {
+                        ["__type"] = valueType.FullName,
+                        ["__instanceId"] = unityObj.GetInstanceID(),
+                        ["__name"] = unityObj.name
+                    };
+                }
+                else if (depth == SerializationDepth.Standard)
+                {
+                    // Return more details but not full serialization for Standard depth
+                    var objData = new Dictionary<string, object>
+                    {
+                        ["__type"] = valueType.FullName,
+                        ["__instanceId"] = unityObj.GetInstanceID(),
+                        ["__name"] = unityObj.name
+                    };
+                    
+                    // Add extra properties for different types of Unity objects
+                    if (value is GameObject go)
+                    {
+                        objData["isActive"] = go.activeSelf;
+                        objData["tag"] = go.tag;
+                        objData["layer"] = go.layer;
+                        objData["componentCount"] = go.GetComponents<Component>().Length;
+                    }
+                    else if (value is Component comp)
+                    {
+                        objData["gameObjectName"] = comp.gameObject.name;
+                        if (comp is Behaviour behaviour)
+                        {
+                            objData["enabled"] = behaviour.enabled;
+                        }
+                    }
+                    
+                    return objData;
+                }
+                else // Deep serialization
+                {
+                    // Use specialized handlers to fully serialize Unity objects
+                    if (SerializationHandlerRegistry.TryGetHandler(valueType, out var handler))
+                    {
+                        try
+                        {
+                            return handler.Serialize(value, depth);
+                        }
+                        catch (Exception handlerEx)
+                        {
+                            Debug.LogWarning($"Handler for {valueType.Name} failed: {handlerEx.Message}");
+                            // Fall back to default fallback representation
+                            return CreateFallbackRepresentation(value, SerializationDepth.Standard);
+                        }
+                    }
+                    
+                    // If no handler, create fallback
+                    return CreateFallbackRepresentation(value, SerializationDepth.Standard);
+                }
             }
             
-            Type valueType = value.GetType();
-            
-            // Handle directly serializable types
+            // For directly serializable types, use them as-is
             if (IsDirectlySerializable(value))
             {
                 return value;
             }
             
-            // Handle Unity Objects
-            if (value is UnityObject unityObj)
+            // For arrays and collections with limited depth
+            if ((valueType.IsArray || value is ICollection) && depth == SerializationDepth.Standard)
             {
-                return new Dictionary<string, object>
+                if (value is ICollection collection)
                 {
-                    ["__unity_object"] = true,
-                    ["__type"] = valueType.FullName,
-                    ["instanceID"] = unityObj.GetInstanceID(),
-                    ["name"] = unityObj.name
-                };
+                    return new Dictionary<string, object>
+                    {
+                        ["__type"] = valueType.FullName,
+                        ["__count"] = collection.Count,
+                        ["__toString"] = value.ToString()
+                    };
+                }
             }
             
-            // Handle collections at deeper depths
-            if (depth > SerializationDepth.Standard && 
-                (value is ICollection || valueType.IsArray || value is IDictionary))
+            // Try to use a specialized handler first
+            if (SerializationHandlerRegistry.TryGetHandler(valueType, out var typeHandler))
             {
-                return CreateFallbackRepresentation(value, depth);
+                try
+                {
+                    return typeHandler.Serialize(value, depth);
+                }
+                catch (Exception handlerEx)
+                {
+                    Debug.LogWarning($"Handler for {valueType.Name} failed: {handlerEx.Message}");
+                }
             }
             
-            // For other objects at deeper depths, recurse
-            if (depth > SerializationDepth.Standard &&
-                (valueType.IsClass || valueType.IsValueType))
+            // For deeper serialization, use reflection to break down the object
+            if (depth > SerializationDepth.Standard ||
+                valueType.Namespace?.StartsWith("UnityEngine") == true || 
+                valueType.Namespace?.StartsWith("UnityEditor") == true)
             {
-                return CreateFallbackRepresentation(value, SerializationDepth.Basic);
+                return CreateFallbackRepresentation(value, depth > SerializationDepth.Standard ? depth : SerializationDepth.Basic);
             }
             
-            // For simple representation, just use ToString
+            // For standard depth with types we don't have special handling for,
+            // provide a simple string representation
             return value.ToString();
         }
 
@@ -595,11 +777,41 @@ namespace UnityMcpBridge.Editor.Helpers
                 return;
             }
 
-            // Add transform info
+            // Add transform info - manually create dictionaries to avoid Vector3 circular references
             var transform = gameObject.transform;
-            result["position"] = transform.position;
-            result["rotation"] = transform.rotation;
-            result["localScale"] = transform.localScale;
+            
+            // Position
+            result["position"] = new Dictionary<string, float>
+            {
+                ["x"] = transform.position.x,
+                ["y"] = transform.position.y,
+                ["z"] = transform.position.z
+            };
+            
+            // Rotation - store both as quaternion and euler angles
+            result["rotation"] = new Dictionary<string, float>
+            {
+                ["x"] = transform.rotation.x,
+                ["y"] = transform.rotation.y,
+                ["z"] = transform.rotation.z,
+                ["w"] = transform.rotation.w
+            };
+            
+            // Euler angles
+            result["eulerAngles"] = new Dictionary<string, float>
+            {
+                ["x"] = transform.eulerAngles.x,
+                ["y"] = transform.eulerAngles.y,
+                ["z"] = transform.eulerAngles.z
+            };
+            
+            // Scale
+            result["localScale"] = new Dictionary<string, float>
+            {
+                ["x"] = transform.localScale.x,
+                ["y"] = transform.localScale.y,
+                ["z"] = transform.localScale.z
+            };
 
             // Add component information
             var components = gameObject.GetComponents<Component>();
@@ -654,6 +866,9 @@ namespace UnityMcpBridge.Editor.Helpers
             }
         }
 
+        /// <summary>
+        /// Extracts component properties for a Unity Component.
+        /// </summary>
         private static void ExtractComponentProperties(Component component, Dictionary<string, object> result, SerializationDepth depth)
         {
             // Add reference to owner GameObject

@@ -18,9 +18,9 @@ namespace UnityMcpBridge.Editor.Helpers.Serialization
         /// Serializes a MeshRenderer component into a dictionary representation.
         /// </summary>
         /// <param name="obj">The MeshRenderer to serialize</param>
-        /// <param name="depth">The maximum depth to traverse (not used for this handler)</param>
+        /// <param name="depth">The serialization depth to use</param>
         /// <returns>A dictionary containing the MeshRenderer's serialized properties</returns>
-        public Dictionary<string, object> Serialize(object obj, int depth = 1)
+        public Dictionary<string, object> Serialize(object obj, SerializationHelper.SerializationDepth depth = SerializationHelper.SerializationDepth.Standard)
         {
             if (obj == null)
                 return null;
@@ -98,6 +98,7 @@ namespace UnityMcpBridge.Editor.Helpers.Serialization
         
         private Dictionary<string, float> SerializeColor(Color color)
         {
+            // Only serialize the basic components to avoid self-referencing loops
             return new Dictionary<string, float>
             {
                 ["r"] = color.r,
@@ -120,6 +121,7 @@ namespace UnityMcpBridge.Editor.Helpers.Serialization
         
         private Dictionary<string, float> SerializeVector3(Vector3 vector)
         {
+            // Only serialize the basic components to avoid self-referencing loops
             return new Dictionary<string, float>
             {
                 ["x"] = vector.x,

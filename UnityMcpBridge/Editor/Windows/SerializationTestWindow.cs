@@ -8,6 +8,7 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityMcpBridge.Editor.Helpers;
 using UnityMcpBridge.Editor.Helpers.Serialization;
+using Newtonsoft.Json.Linq;
 
 namespace UnityMcpBridge.Editor.Windows
 {
@@ -17,22 +18,28 @@ namespace UnityMcpBridge.Editor.Windows
     /// </summary>
     public class SerializationTestWindow : EditorWindow
     {
+        private static SerializationTestWindow _window = null;
+        
+        [MenuItem("Window/Unity MCP/Serialization Test")]
+        public static void ShowWindow()
+        {
+            _window = GetWindow<SerializationTestWindow>("Serialization Test");
+            _window.Show();
+        }
+
+        private bool _serializeSelectedOnly = false;
+        private GameObject _selectedObject = null;
         private SerializationHelper.SerializationDepth _selectedDepth = SerializationHelper.SerializationDepth.Standard;
-        private Vector2 _scrollPosition;
+        private System.Type _serializablesType;
+        private string _resultsJson = "";
+        private Vector2 _scrollPosition = Vector2.zero;
+        private Vector2 _errorScrollPosition;
+        private bool _showErrors = true;
         private string _serializedOutput = "";
         private bool _prettyPrint = true;
         private List<string> _errors = new List<string>();
         private List<string> _warnings = new List<string>();
-        private bool _showErrors = true;
-        private Vector2 _errorScrollPosition;
-        private GameObject _selectedObject;
-        private bool _serializeSelectedOnly = false;
-
-        [MenuItem("MCP/Serialization Test Window")]
-        public static void ShowWindow()
-        {
-            GetWindow<SerializationTestWindow>("Serialization Test");
-        }
+        private string _jsonResult = "";
 
         private void OnGUI()
         {
@@ -78,6 +85,44 @@ namespace UnityMcpBridge.Editor.Windows
 
             EditorGUILayout.Space();
 
+            // Type-based serialization
+            EditorGUILayout.BeginVertical("box");
+            GUILayout.Label("Serialize All Objects of Type", EditorStyles.boldLabel);
+            
+            // Create a string to show the currently selected type
+            string typeLabel = _serializablesType != null ? _serializablesType.Name : "Select Type...";
+            
+            if (GUILayout.Button(typeLabel))
+            {
+                // Create and show a dropdown menu with types
+                var menu = new GenericMenu();
+                
+                // Get all types that inherit from UnityEngine.Object
+                var types = System.AppDomain.CurrentDomain.GetAssemblies()
+                    .SelectMany(a => a.GetTypes())
+                    .Where(t => typeof(UnityEngine.Object).IsAssignableFrom(t) && !t.IsAbstract && !t.IsInterface)
+                    .OrderBy(t => t.Name)
+                    .ToList();
+                
+                // Add an option for each type
+                foreach (var type in types)
+                {
+                    menu.AddItem(new GUIContent(type.Name), _serializablesType == type, 
+                        () => { _serializablesType = type; });
+                }
+                
+                menu.ShowAsContext();
+            }
+            
+            if (GUILayout.Button("Serialize All Objects of Selected Type") && _serializablesType != null)
+            {
+                SerializeSerializables();
+            }
+            
+            EditorGUILayout.EndVertical();
+
+            EditorGUILayout.Space();
+
             // Action buttons
             if (GUILayout.Button(_serializeSelectedOnly ? "Serialize Selected Object" : "Serialize Current Scene"))
             {
@@ -89,6 +134,13 @@ namespace UnityMcpBridge.Editor.Windows
                 {
                     SerializeCurrentScene();
                 }
+            }
+
+            // Add MCP Bridge integration test button
+            GUILayout.Space(10);
+            if (GUILayout.Button("Test MCP Bridge Integration", GUILayout.Height(30)))
+            {
+                TestMcpBridgeIntegration();
             }
 
             EditorGUILayout.Space();
@@ -143,16 +195,25 @@ namespace UnityMcpBridge.Editor.Windows
             
             if (_selectedObject == null)
             {
-                _errors.Add("No GameObject selected for serialization.");
-                _serializedOutput = "{ \"error\": \"No GameObject selected\" }";
+                _errors.Add("No object selected");
+                _serializedOutput = "{ \"error\": \"No object selected\" }";
                 return;
             }
             
             try
             {
-                // Use the exact same serialization method as the rest of the codebase
-                _serializedOutput = SerializationHelper.SafeSerializeToJson(_selectedObject, _selectedDepth, _prettyPrint);
-                Debug.Log($"Serialized GameObject '{_selectedObject.name}'.");
+                // Serialize the selected object using the standard helper
+                string json = SerializationHelper.SafeSerializeToJson(_selectedObject, _selectedDepth, false);
+                
+                // Parse the JSON to ensure it's valid
+                var parsedObject = Newtonsoft.Json.JsonConvert.DeserializeObject(json);
+                
+                // Serialize back with pretty formatting if needed
+                _serializedOutput = Newtonsoft.Json.JsonConvert.SerializeObject(
+                    parsedObject, 
+                    _prettyPrint ? Newtonsoft.Json.Formatting.Indented : Newtonsoft.Json.Formatting.None);
+                
+                Debug.Log($"Serialized object '{_selectedObject.name}'");
             }
             catch (System.Exception ex)
             {
@@ -182,7 +243,7 @@ namespace UnityMcpBridge.Editor.Windows
                 };
                 
                 // Serialize each root object using the standard serialization method
-                var objectsData = new List<string>();
+                var objectsData = new List<object>();
                 
                 foreach (var rootObject in rootObjects)
                 {
@@ -190,40 +251,34 @@ namespace UnityMcpBridge.Editor.Windows
                     {
                         // Use the exact same serialization method as the rest of the codebase
                         string objectJson = SerializationHelper.SafeSerializeToJson(rootObject, _selectedDepth, false);
-                        objectsData.Add(objectJson);
+                        
+                        // Parse the JSON to an object so it gets included properly in the final JSON
+                        var parsedObject = Newtonsoft.Json.JsonConvert.DeserializeObject(objectJson);
+                        objectsData.Add(parsedObject);
                     }
                     catch (System.Exception ex)
                     {
                         _errors.Add($"Failed to serialize {rootObject.name}: {ex.Message}");
-                        objectsData.Add($"{{ \"error\": \"Failed to serialize {rootObject.name}: {ex.Message}\" }}");
+                        objectsData.Add(new { error = $"Failed to serialize {rootObject.name}: {ex.Message}" });
                     }
                 }
 
-                // Create the final JSON
-                var jsonBuilder = new StringBuilder();
-                jsonBuilder.AppendLine("{");
-                jsonBuilder.AppendLine($"  \"scene\": {{");
-                jsonBuilder.AppendLine($"    \"sceneName\": \"{scene.name}\",");
-                jsonBuilder.AppendLine($"    \"path\": \"{scene.path}\",");
-                jsonBuilder.AppendLine($"    \"rootObjectCount\": {rootObjects.Length},");
-                jsonBuilder.AppendLine($"    \"serializationDepth\": \"{_selectedDepth}\",");
-                jsonBuilder.AppendLine($"    \"objects\": [");
-                
-                for (int i = 0; i < objectsData.Count; i++)
+                // Create the final JSON structure using Newtonsoft
+                var finalData = new Dictionary<string, object>
                 {
-                    jsonBuilder.Append("      ");
-                    jsonBuilder.Append(objectsData[i]);
-                    if (i < objectsData.Count - 1)
-                        jsonBuilder.AppendLine(",");
-                    else
-                        jsonBuilder.AppendLine();
-                }
-                
-                jsonBuilder.AppendLine("    ]");
-                jsonBuilder.AppendLine("  }");
-                jsonBuilder.AppendLine("}");
-                
-                _serializedOutput = _prettyPrint ? jsonBuilder.ToString() : jsonBuilder.ToString().Replace("\n", "").Replace("  ", "");
+                    ["scene"] = new Dictionary<string, object>
+                    {
+                        ["sceneName"] = scene.name,
+                        ["path"] = scene.path,
+                        ["rootObjectCount"] = rootObjects.Length,
+                        ["serializationDepth"] = _selectedDepth.ToString(),
+                        ["objects"] = objectsData
+                    }
+                };
+
+                // Serialize to JSON
+                _serializedOutput = Newtonsoft.Json.JsonConvert.SerializeObject(finalData, 
+                    _prettyPrint ? Newtonsoft.Json.Formatting.Indented : Newtonsoft.Json.Formatting.None);
                 
                 Debug.Log($"Serialized scene '{scene.name}' with {rootObjects.Length} root objects.");
             }
@@ -247,6 +302,94 @@ namespace UnityMcpBridge.Editor.Windows
             {
                 File.WriteAllText(path, _serializedOutput);
                 Debug.Log($"Serialized data saved to {path}");
+            }
+        }
+
+        private void TestMcpBridgeIntegration()
+        {
+            // Simulate a ManageGameObject find command
+            var command = new Dictionary<string, object>
+            {
+                { "action", "find" },
+                { "find_all", true },
+                { "search_inactive", true }
+            };
+
+            // Convert to JObject (as would be received from the server)
+            var commandJObject = JObject.FromObject(command);
+
+            // Call the ManageGameObject.HandleCommand method directly
+            var result = Tools.ManageGameObject.HandleCommand(commandJObject);
+
+            // Display the result in the text area
+            _serializedOutput = Newtonsoft.Json.JsonConvert.SerializeObject(result, Newtonsoft.Json.Formatting.Indented);
+            Debug.Log("MCP Bridge Integration test executed");
+            Repaint();
+        }
+
+        private void SerializeSerializables()
+        {
+            _errors.Clear();
+            _warnings.Clear();
+
+            if (_serializablesType == null)
+            {
+                _errors.Add("No type selected");
+                _serializedOutput = "{ \"error\": \"No type selected\" }";
+                return;
+            }
+
+            try
+            {
+                // Find all instances of the selected type
+                var instances = UnityEngine.Object.FindObjectsOfType(_serializablesType);
+                if (instances.Length == 0)
+                {
+                    _warnings.Add($"No instances of {_serializablesType.Name} found in scene");
+                    _serializedOutput = $"{{ \"warning\": \"No instances of {_serializablesType.Name} found in scene\" }}";
+                    return;
+                }
+
+                // Create a dictionary to hold all the serialized objects
+                var objectsData = new List<object>();
+                
+                foreach (var instance in instances)
+                {
+                    try
+                    {
+                        string objectJson = SerializationHelper.SafeSerializeToJson(instance, _selectedDepth, false);
+                        // Parse each JSON object to ensure it's valid
+                        var parsedObject = Newtonsoft.Json.JsonConvert.DeserializeObject(objectJson);
+                        objectsData.Add(parsedObject);
+                    }
+                    catch (System.Exception ex)
+                    {
+                        string objectName = instance != null ? (instance as UnityEngine.Object)?.name ?? "unknown" : "null";
+                        _errors.Add($"Failed to serialize {objectName}: {ex.Message}");
+                        Debug.LogError($"Failed to serialize {objectName}: {ex.Message}");
+                    }
+                }
+
+                // Create the final data structure
+                var finalData = new Dictionary<string, object>
+                {
+                    { "type", _serializablesType.Name },
+                    { "objects", objectsData },
+                    { "count", objectsData.Count }
+                };
+
+                // Serialize the final structure
+                _serializedOutput = Newtonsoft.Json.JsonConvert.SerializeObject(
+                    finalData, 
+                    _prettyPrint ? Newtonsoft.Json.Formatting.Indented : Newtonsoft.Json.Formatting.None);
+                
+                Debug.Log($"Serialized {objectsData.Count} instances of {_serializablesType.Name}");
+            }
+            catch (System.Exception ex)
+            {
+                _errors.Add($"Failed to serialize {_serializablesType.Name} instances: {ex.Message}");
+                Debug.LogError($"Serialization error: {ex.Message}");
+                _serializedOutput = $"{{ \"error\": \"{ex.Message}\" }}";
             }
         }
     }

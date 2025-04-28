@@ -307,22 +307,54 @@ namespace UnityMcpBridge.Editor.Windows
 
         private void TestMcpBridgeIntegration()
         {
-            // Simulate a ManageGameObject find command
-            var command = new Dictionary<string, object>
+            // Log scene information for debugging
+            var scene = UnityEngine.SceneManagement.SceneManager.GetActiveScene();
+            var rootObjects = scene.GetRootGameObjects();
+            Debug.Log($"Active scene: {scene.name} with {rootObjects.Length} root objects");
+            
+            foreach (var root in rootObjects)
             {
-                { "action", "find" },
-                { "find_all", true },
-                { "search_inactive", true }
+                Debug.Log($"Root object: {root.name}");
+            }
+            
+            // Direct approach using FindObjectsOfType
+            var allGameObjects = UnityEngine.Object.FindObjectsOfType<GameObject>(true);
+            Debug.Log($"Found {allGameObjects.Length} GameObjects directly with FindObjectsOfType");
+            
+            // Create a list to hold serialized objects
+            var gameObjectDataList = new List<object>();
+            
+            // Serialize each GameObject individually and add to the list
+            foreach (var go in allGameObjects)
+            {
+                try
+                {
+                    // Use SafeSerializeToJson instead of CreateSerializationResult
+                    string objectJson = SerializationHelper.SafeSerializeToJson(go, SerializationHelper.SerializationDepth.Standard, false);
+                    var parsedObject = Newtonsoft.Json.JsonConvert.DeserializeObject(objectJson);
+                    gameObjectDataList.Add(parsedObject);
+                    
+                    Debug.Log($"Successfully serialized GameObject: {go.name}");
+                }
+                catch (System.Exception ex)
+                {
+                    Debug.LogError($"Failed to serialize GameObject {go.name}: {ex.Message}");
+                    gameObjectDataList.Add(new { error = $"Failed to serialize: {ex.Message}" });
+                }
+            }
+            
+            // Create a response with serialized objects
+            var result = new Dictionary<string, object>
+            {
+                { "success", true },
+                { "message", $"Found {allGameObjects.Length} game objects directly." },
+                { "data", gameObjectDataList }
             };
 
-            // Convert to JObject (as would be received from the server)
-            var commandJObject = JObject.FromObject(command);
-
-            // Call the ManageGameObject.HandleCommand method directly
-            var result = Tools.ManageGameObject.HandleCommand(commandJObject);
-
             // Display the result in the text area
-            _serializedOutput = Newtonsoft.Json.JsonConvert.SerializeObject(result, Newtonsoft.Json.Formatting.Indented);
+            _serializedOutput = Newtonsoft.Json.JsonConvert.SerializeObject(result, 
+                _prettyPrint ? Newtonsoft.Json.Formatting.Indented : Newtonsoft.Json.Formatting.None);
+            
             Debug.Log("MCP Bridge Integration test executed");
             Repaint();
         }

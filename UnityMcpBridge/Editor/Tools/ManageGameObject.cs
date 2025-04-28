@@ -8,7 +8,7 @@ using UnityEditor.SceneManagement;
 using UnityEditorInternal;
 using UnityEngine;
 using UnityEngine.SceneManagement;
-using UnityMcpBridge.Editor.Helpers; // For Response class
+using UnityMcpBridge.Editor.Helpers; // For Response class and SerializationUtilities
 
 namespace UnityMcpBridge.Editor.Tools
 {
@@ -854,48 +854,53 @@ namespace UnityMcpBridge.Editor.Tools
             string searchMethod
         )
         {
-            bool findAll = @params["findAll"]?.ToObject<bool>() ?? false;
-            List<GameObject> foundObjects = FindObjectsInternal(
+            bool findAll = @params["find_all"]?.ToObject<bool>() ?? false;
+            bool searchInactive = @params["search_inactive"]?.ToObject<bool>() ?? false;
+            bool searchInChildren = @params["search_in_children"]?.ToObject<bool>() ?? false;
+            string searchTerm = @params["search_term"]?.ToString();
+
+            JObject findParams = new JObject
+            {
+                ["searchInactive"] = searchInactive,
+                ["searchInChildren"] = searchInChildren,
+                ["searchTerm"] = searchTerm,
+            };
+
+            List<GameObject> results = FindObjectsInternal(
                 targetToken,
                 searchMethod,
                 findAll,
-                @params
+                findParams
             );
 
-            if (foundObjects.Count == 0)
-            {
-                return Response.Success("No matching GameObjects found.", new List<object>());
-            }
-
-            var results = foundObjects.Select(go => GetGameObjectData(go)).ToList();
-            return Response.Success($"Found {results.Count} GameObject(s).", results);
+            // Use SerializationUtilities instead of manually serializing each GameObject
+            var serializedResults = SerializationUtilities.SerializeUnityObjects(results, "manage_gameobject");
+            
+            return SerializationUtilities.SerializeResponse(
+                "manage_gameobject",
+                $"Found {results.Count} game objects.",
+                new { gameObjects = serializedResults }
+            );
         }
 
         private static object GetComponentsFromTarget(string target, string searchMethod)
         {
-            GameObject targetGo = FindObjectInternal(target, searchMethod);
-            if (targetGo == null)
-            {
+            GameObject go = FindObjectInternal(target, searchMethod);
+            if (go == null)
                 return Response.Error(
-                    $"Target GameObject ('{target}') not found using method '{searchMethod ?? "default"}'."
+                    $"Failed to find GameObject with {searchMethod}: '{target}'."
                 );
-            }
 
-            try
-            {
-                Component[] components = targetGo.GetComponents<Component>();
-                var componentData = components.Select(c => GetComponentData(c)).ToList();
-                return Response.Success(
-                    $"Retrieved {componentData.Count} components from '{targetGo.name}'.",
-                    componentData
-                );
-            }
-            catch (Exception e)
-            {
-                return Response.Error(
-                    $"Error getting components from '{targetGo.name}': {e.Message}"
-                );
-            }
+            var components = go.GetComponents<Component>();
+            
+            // Use SerializationUtilities instead of manually serializing each component
+            var serializedComponents = SerializationUtilities.SerializeUnityObjects(components, "manage_gameobject");
+            
+            return SerializationUtilities.SerializeResponse(
+                "manage_gameobject", 
+                $"Found {components.Length} components on {go.name}.",
+                new { components = serializedComponents }
+            );
         }
 
         private static object AddComponentToTarget(
@@ -2114,112 +2119,21 @@ namespace UnityMcpBridge.Editor.Tools
         {
             if (go == null)
                 return null;
-            return new
-            {
-                name = go.name,
-                instanceID = go.GetInstanceID(),
-                tag = go.tag,
-                layer = go.layer,
-                activeSelf = go.activeSelf,
-                activeInHierarchy = go.activeInHierarchy,
-                isStatic = go.isStatic,
-                scenePath = go.scene.path, // Identify which scene it belongs to
-                transform = new // Serialize transform components carefully to avoid JSON issues
-                {
-                    // Serialize Vector3 components individually to prevent self-referencing loops.
-                    // The default serializer can struggle with properties like Vector3.normalized.
-                    position = new
-                    {
-                        x = go.transform.position.x,
-                        y = go.transform.position.y,
-                        z = go.transform.position.z,
-                    },
-                    localPosition = new
-                    {
-                        x = go.transform.localPosition.x,
-                        y = go.transform.localPosition.y,
-                        z = go.transform.localPosition.z,
-                    },
-                    rotation = new
-                    {
-                        x = go.transform.rotation.eulerAngles.x,
-                        y = go.transform.rotation.eulerAngles.y,
-                        z = go.transform.rotation.eulerAngles.z,
-                    },
-                    localRotation = new
-                    {
-                        x = go.transform.localRotation.eulerAngles.x,
-                        y = go.transform.localRotation.eulerAngles.y,
-                        z = go.transform.localRotation.eulerAngles.z,
-                    },
-                    scale = new
-                    {
-                        x = go.transform.localScale.x,
-                        y = go.transform.localScale.y,
-                        z = go.transform.localScale.z,
-                    },
-                    forward = new
-                    {
-                        x = go.transform.forward.x,
-                        y = go.transform.forward.y,
-                        z = go.transform.forward.z,
-                    },
-                    up = new
-                    {
-                        x = go.transform.up.x,
-                        y = go.transform.up.y,
-                        z = go.transform.up.z,
-                    },
-                    right = new
-                    {
-                        x = go.transform.right.x,
-                        y = go.transform.right.y,
-                        z = go.transform.right.z,
-                    },
-                },
-                parentInstanceID = go.transform.parent?.gameObject.GetInstanceID() ?? 0, // 0 if no parent
-                // Optionally include components, but can be large
-                // components = go.GetComponents<Component>().Select(c => GetComponentData(c)).ToList()
-                // Or just component names:
-                componentNames = go.GetComponents<Component>()
-                    .Select(c => c.GetType().FullName)
-                    .ToList(),
-            };
+                
+            // Instead of manually building an object, use the serialization system
+            return SerializationUtilities.SerializeGameObject(go, "manage_gameobject");
         }
 
         /// <summary>
         /// Creates a serializable representation of a Component.
-        /// TODO: Add property serialization.
         /// </summary>
         private static object GetComponentData(Component c)
         {
             if (c == null)
                 return null;
-            var data = new Dictionary<string, object>
-            {
-                { "typeName", c.GetType().FullName },
-                { "instanceID", c.GetInstanceID() },
-            };
-
-            // Attempt to serialize public properties/fields (can be noisy/complex)
-            /*
-            try {
-                var properties = new Dictionary<string, object>();
-                var type = c.GetType();
-                BindingFlags flags = BindingFlags.Public | BindingFlags.Instance;
                 
-                foreach (var prop in type.GetProperties(flags).Where(p => p.CanRead && p.GetIndexParameters().Length == 0)) {
-                    try { properties[prop.Name] = prop.GetValue(c); } catch { }
-                }
-                foreach (var field in type.GetFields(flags)) {
-                     try { properties[field.Name] = field.GetValue(c); } catch { }
-                }
-                data["properties"] = properties;
-            } catch (Exception ex) {
-                data["propertiesError"] = ex.Message;
-            }
-            */
-            return data;
+            // Use the serialization system instead of manual serialization
+            return SerializationUtilities.SerializeComponent(c, "manage_gameobject");
         }
     }
 }

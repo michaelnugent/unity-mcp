@@ -388,4 +388,203 @@ def convert_bounds(value: BoundsType, param_name: str = "Bounds") -> Dict[str, D
     except Exception as e:
         raise ParameterValidationError(
             f"{error_prefix}: {str(e)}"
-        ) 
+        )
+
+# Enhanced serialization support
+def get_serialized_value(obj, property_path=None):
+    """
+    Extract a value from a serialized Unity object by property path.
+    
+    Args:
+        obj: The serialized Unity object (dictionary) containing serialization metadata
+        property_path: Property path in dot notation (e.g., "transform.position.x")
+        
+    Returns:
+        The value at the given property path, or the object itself if no path is specified
+    
+    Raises:
+        KeyError: If the property path doesn't exist in the object
+    """
+    if obj is None:
+        return None
+        
+    # If no property path is specified, return the original object data
+    if not property_path:
+        # Return the data property if this is a SerializationResult
+        return obj.get('Data', obj)
+        
+    # Handle property path navigation
+    parts = property_path.split('.')
+    current = obj
+    
+    # If this is a serialization result, start with Data property
+    if isinstance(current, dict) and 'Data' in current:
+        current = current['Data']
+        
+    # Navigate through the property path
+    for part in parts:
+        if isinstance(current, dict) and part in current:
+            current = current[part]
+        else:
+            raise KeyError(f"Property '{part}' not found in path '{property_path}'")
+            
+    return current
+
+def is_serialized_unity_object(obj):
+    """
+    Check if an object is a serialized Unity object with enhanced serialization metadata.
+    
+    Args:
+        obj: The object to check
+        
+    Returns:
+        True if the object is a serialized Unity object, False otherwise
+    """
+    if not isinstance(obj, dict):
+        return False
+        
+    # Check for serialization metadata properties
+    serialization_props = ['__serialization_status', '__serialization_depth', 'ObjectTypeName']
+    
+    # Either a direct object with metadata or a SerializationResult
+    if any(prop in obj for prop in serialization_props):
+        return True
+        
+    # Check if it's a serialization result (Data property with metadata inside)
+    if 'Data' in obj and isinstance(obj['Data'], dict):
+        return any(prop in obj['Data'] for prop in serialization_props)
+        
+    return False
+
+def extract_type_info(obj):
+    """
+    Extract type information from a serialized Unity object.
+    
+    Args:
+        obj: The serialized Unity object
+        
+    Returns:
+        A tuple of (type_name, instance_id) where type_name is the full name of the object's type
+        and instance_id is the Unity instance ID if available, or None
+    """
+    if not is_serialized_unity_object(obj):
+        return (None, None)
+        
+    # Handle both direct objects and SerializationResult objects
+    data = obj.get('Data', obj)
+    
+    type_name = data.get('ObjectTypeName')
+    instance_id = data.get('InstanceID')
+    
+    return (type_name, instance_id)
+
+def get_unity_components(serialized_gameobject):
+    """
+    Extract components from a serialized GameObject.
+    
+    Args:
+        serialized_gameobject: A serialized GameObject
+        
+    Returns:
+        A list of serialized component dictionaries, or an empty list if no components are found
+    """
+    if not is_serialized_unity_object(serialized_gameobject):
+        return []
+        
+    # Handle both direct objects and SerializationResult objects
+    data = serialized_gameobject.get('Data', serialized_gameobject)
+    
+    # Try to get components list
+    components = data.get('components', [])
+    
+    # If components is a list, return it
+    if isinstance(components, list):
+        return components
+        
+    return []
+    
+def get_unity_children(serialized_gameobject):
+    """
+    Extract children from a serialized GameObject.
+    
+    Args:
+        serialized_gameobject: A serialized GameObject
+        
+    Returns:
+        A list of serialized GameObject dictionaries representing the children, 
+        or an empty list if no children are found
+    """
+    if not is_serialized_unity_object(serialized_gameobject):
+        return []
+        
+    # Handle both direct objects and SerializationResult objects
+    data = serialized_gameobject.get('Data', serialized_gameobject)
+    
+    # Try to get children list
+    children = data.get('children', [])
+    
+    # If children is a list, return it
+    if isinstance(children, list):
+        return children
+        
+    return []
+
+def find_component_by_type(serialized_gameobject, component_type):
+    """
+    Find a component by type in a serialized GameObject.
+    
+    Args:
+        serialized_gameobject: A serialized GameObject
+        component_type: The name of the component type to find
+        
+    Returns:
+        The serialized component dictionary if found, or None if not found
+    """
+    components = get_unity_components(serialized_gameobject)
+    
+    for component in components:
+        component_data = component.get('Data', component)
+        type_name = component_data.get('ObjectTypeName', '')
+        
+        # Check if the component type matches (case-insensitive)
+        if type_name.lower() == component_type.lower():
+            return component
+        
+        # Also check for short names without namespace
+        short_name = type_name.split('.')[-1] if '.' in type_name else type_name
+        if short_name.lower() == component_type.lower():
+            return component
+            
+    return None
+
+def is_circular_reference(obj):
+    """
+    Check if an object is a circular reference.
+    
+    Args:
+        obj: The object to check
+        
+    Returns:
+        True if the object is a circular reference, False otherwise
+    """
+    if not isinstance(obj, dict):
+        return False
+        
+    # Check for circular reference flag
+    circular_ref = obj.get('__circular_reference', False)
+    return bool(circular_ref)
+
+def get_reference_path(obj):
+    """
+    Get the reference path for a circular reference.
+    
+    Args:
+        obj: The circular reference object
+        
+    Returns:
+        The reference path if the object is a circular reference, None otherwise
+    """
+    if not is_circular_reference(obj):
+        return None
+        
+    return obj.get('__reference_path') 

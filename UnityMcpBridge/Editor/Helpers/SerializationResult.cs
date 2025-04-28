@@ -39,5 +39,16 @@ namespace UnityMcpBridge.Editor.Helpers
         /// Additional properties gathered through reflection when direct serialization is not possible.
         /// </summary>
         public Dictionary<string, object> IntrospectedProperties;
+        
+        /// <summary>
+        /// Whether this object is a circular reference to another object in the object graph.
+        /// </summary>
+        public bool IsCircularReference;
+        
+        /// <summary>
+        /// The path to the original instance of this object in the serialization graph.
+        /// Only present if IsCircularReference is true.
+        /// </summary>
+        public string CircularReferencePath;
     }
 } 

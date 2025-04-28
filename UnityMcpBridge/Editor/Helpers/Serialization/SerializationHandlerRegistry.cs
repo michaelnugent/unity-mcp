@@ -70,6 +70,35 @@ namespace UnityMcpBridge.Editor.Helpers.Serialization
         }
 
         /// <summary>
+        /// Tries to get a handler for a specific type.
+        /// </summary>
+        /// <param name="type">The type to get a handler for</param>
+        /// <param name="handler">When this method returns, contains the handler if found, or null if not found</param>
+        /// <returns>True if a handler was found, false otherwise</returns>
+        public static bool TryGetHandler(Type type, out ISerializationHandler handler)
+        {
+            if (type == null)
+                throw new ArgumentNullException(nameof(type));
+
+            // Try to get an exact match first
+            if (_handlers.TryGetValue(type, out handler))
+                return true;
+
+            // If no exact match, look for handlers that can handle base types or interfaces
+            foreach (var handlerEntry in _handlers)
+            {
+                if (handlerEntry.Key.IsAssignableFrom(type))
+                {
+                    handler = handlerEntry.Value;
+                    return true;
+                }
+            }
+
+            handler = null;
+            return false;
+        }
+
+        /// <summary>
         /// Returns all registered handlers.
         /// </summary>
         /// <returns>A collection of all registered handlers</returns>

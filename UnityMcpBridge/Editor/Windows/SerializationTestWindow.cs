@@ -150,8 +150,38 @@ namespace UnityMcpBridge.Editor.Windows
             
             try
             {
-                // Use our new serialization system
-                _serializedOutput = _selectedObject.ToSafeJson(_selectedDepth, _prettyPrint);
+                // Instead of directly using ToSafeJson, do the same parsing we do for scene objects
+                string objectJson = _selectedObject.ToSafeJson(_selectedDepth, false);
+                
+                // Debug logging to see the raw JSON
+                Debug.Log($"Raw JSON for {_selectedObject.name}: {objectJson.Substring(0, Mathf.Min(100, objectJson.Length))}...");
+                
+                // Create a dictionary to hold the deserialized data
+                Dictionary<string, object> objData = new Dictionary<string, object>();
+                
+                // Extract basic information
+                objData["WasFullySerialized"] = false;
+                objData["ErrorMessage"] = "";
+                objData["ObjectTypeName"] = _selectedObject.GetType().FullName;
+                objData["IsCircularReference"] = false;
+                objData["CircularReferencePath"] = "";
+                
+                // Get the fallback representation directly
+                var introspectedProps = SerializationHelper.CreateFallbackRepresentation(_selectedObject, _selectedDepth);
+                if (introspectedProps != null && introspectedProps.Count > 0)
+                {
+                    objData["IntrospectedProperties"] = introspectedProps;
+                    objData["Handler"] = introspectedProps.ContainsKey("_handlerType") ? 
+                                         introspectedProps["_handlerType"] : "None";
+                }
+                
+                // Use Newtonsoft.Json to serialize the entire structure with pretty printing if needed
+                var settings = new JsonSerializerSettings
+                { 
+                    Formatting = _prettyPrint ? Formatting.Indented : Formatting.None
+                };
+                _serializedOutput = JsonConvert.SerializeObject(objData, settings);
+                
                 Debug.Log($"Serialized GameObject '{_selectedObject.name}'.");
             }
             catch (System.Exception ex)

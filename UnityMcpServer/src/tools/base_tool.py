@@ -4,12 +4,22 @@ Base class for all Unity MCP tools with shared validation logic.
 import asyncio
 from typing import Dict, Any, Optional, Type, List, Tuple, Union
 from unity_connection import get_unity_connection, ParameterValidationError
-from validation_utils import validate_required_param, validate_param_type
+from validation_utils import (
+    validate_required_param, validate_param_type,
+    validate_serialized_gameobject, validate_serialized_component, 
+    validate_serialized_transform, validate_serialization_status
+)
+
 # Import the new type converters
 from type_converters import (
     convert_vector2, convert_vector3, convert_quaternion,
-    convert_color, convert_rect, convert_bounds, euler_to_quaternion
+    convert_color, convert_rect, convert_bounds, euler_to_quaternion,
+    is_serialized_unity_object, extract_type_info, get_unity_components,
+    get_unity_children, find_component_by_type
 )
+
+# Import serialization utilities
+import serialization_utils
 
 class BaseTool:
     """Base class for all Unity MCP tools with shared validation logic."""
@@ -26,6 +36,11 @@ class BaseTool:
     color_params: List[str] = []
     rect_params: List[str] = []
     bounds_params: List[str] = []
+    
+    # Parameters expected to be serialized Unity objects of specific types
+    gameobject_params: List[str] = []
+    component_params: List[str] = []
+    transform_params: List[str] = []
     
     def __init__(self, ctx=None):
         self.ctx = ctx
@@ -91,6 +106,21 @@ class BaseTool:
         for param_name in self.bounds_params:
             if param_name in params and params[param_name] is not None:
                 converted_params[param_name] = convert_bounds(params[param_name], param_name)
+        
+        # Validate GameObject parameters
+        for param_name in self.gameobject_params:
+            if param_name in params and params[param_name] is not None:
+                validate_serialized_gameobject(params[param_name], param_name)
+        
+        # Validate Component parameters
+        for param_name in self.component_params:
+            if param_name in params and params[param_name] is not None:
+                validate_serialized_component(params[param_name], param_name)
+        
+        # Validate Transform parameters
+        for param_name in self.transform_params:
+            if param_name in params and params[param_name] is not None:
+                validate_serialized_transform(params[param_name], param_name)
         
         # Allow subclasses to add more specific validation and conversion
         self.additional_validation(action, converted_params)
@@ -173,7 +203,45 @@ class BaseTool:
             raise ParameterValidationError(str(e))
         
         # Send command using the Unity connection
-        return self.unity_conn.send_command(command_type, params)
+        response = self.unity_conn.send_command(command_type, params)
+        
+        # Post-process serialized Unity objects if needed
+        if isinstance(response, dict) and 'data' in response:
+            response = self.post_process_response(response, action, params)
+            
+        return response
+    
+    def post_process_response(self, response: Dict[str, Any], action: str, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Post-process the response from Unity, especially for serialized objects.
+        
+        This method can be overridden by subclasses to perform tool-specific 
+        post-processing of responses. The default implementation returns the response as-is.
+        
+        Args:
+            response: The response from Unity
+            action: The current action being performed
+            params: The parameters that were sent
+            
+        Returns:
+            The processed response
+        """
+        # By default, return the response unchanged
+        return response
+        
+    def process_serialized_unity_object(self, obj: Any) -> Any:
+        """Process a serialized Unity object for client consumption.
+        
+        Subclasses can override this to perform tool-specific processing of serialized objects.
+        The default implementation strips internal metadata if requested by configuration.
+        
+        Args:
+            obj: The serialized object from Unity
+            
+        Returns:
+            The processed object
+        """
+        # By default, just return the object unchanged
+        return obj
     
     def needs_unity_validation(self, action: str, params: Dict[str, Any]) -> bool:
         """Determine if a validate_only request needs to go to Unity for validation.

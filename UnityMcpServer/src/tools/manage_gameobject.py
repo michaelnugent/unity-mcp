@@ -10,6 +10,11 @@ from typing import Dict, Any, Optional, List, Union, Literal, TypedDict
 from mcp.server.fastmcp import FastMCP, Context
 from .base_tool import BaseTool
 from unity_connection import ParameterValidationError
+import serialization_utils
+from type_converters import (
+    is_serialized_unity_object, extract_type_info, get_unity_components,
+    get_unity_children, find_component_by_type
+)
 
 class GameObjectInfo(TypedDict, total=False):
     """Information about a Unity GameObject"""
@@ -45,6 +50,11 @@ class GameObjectTool(BaseTool):
     # Define parameters that should be validated as Vector3
     vector3_params = ["position", "rotation", "scale"]
     
+    # Define parameters expected to be serialized Unity objects
+    gameobject_params = ["gameobject", "parent_gameobject", "child_gameobject"]
+    component_params = ["component", "target_component"]
+    transform_params = ["transform"]
+    
     def additional_validation(self, action: str, params: Dict[str, Any]) -> None:
         """Additional validation specific to the GameObject tool."""
         if action == "create" and params.get("saveAsPrefab"):
@@ -56,6 +66,131 @@ class GameObjectTool(BaseTool):
                 raise ParameterValidationError(
                     f"{self.tool_name} 'create' parameter 'prefabPath' must end with '.prefab'"
                 )
+    
+    def post_process_response(self, response: Dict[str, Any], action: str, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Post-process the response to handle serialized GameObject objects.
+        
+        For certain actions like 'find', 'get_children', or 'instantiate', the response
+        may contain serialized GameObject objects that need special handling.
+        
+        Args:
+            response: The response from Unity
+            action: The action that was performed
+            params: The parameters that were sent
+            
+        Returns:
+            The processed response
+        """
+        # Process responses containing GameObjects
+        if action in ["find", "get_children", "get_components", "instantiate", "create"]:
+            # Check if this is a successful response with data
+            if response.get("success") and "data" in response:
+                data = response["data"]
+                
+                # For find/get_children, the data might be a list of GameObjects
+                if isinstance(data, list):
+                    processed_list = []
+                    for item in data:
+                        if is_serialized_unity_object(item):
+                            processed_list.append(self.process_serialized_unity_object(item))
+                        else:
+                            processed_list.append(item)
+                    response["data"] = processed_list
+                    
+                # For single GameObject responses
+                elif isinstance(data, dict) and is_serialized_unity_object(data):
+                    response["data"] = self.process_serialized_unity_object(data)
+                    
+        return response
+        
+    def process_serialized_unity_object(self, obj: Any) -> Any:
+        """Process a serialized Unity GameObject object for client consumption.
+        
+        Args:
+            obj: The serialized GameObject object
+            
+        Returns:
+            A processed version of the GameObject with enhanced metadata
+        """
+        if not is_serialized_unity_object(obj):
+            return obj
+            
+        # Extract metadata for easy access
+        metadata = serialization_utils.get_serialization_info(obj)
+        
+        # Create a processed version with key GameObject information highlighted
+        result = {
+            # Include the base serialized object
+            **obj,
+            
+            # Add computed properties for easier access
+            "components_summary": self._get_components_summary(obj),
+            "children_count": len(get_unity_children(obj)),
+            "full_path": serialization_utils.get_gameobject_path(obj),
+            "transform_data": self._get_transform_data(obj)
+        }
+        
+        return result
+    
+    def _get_components_summary(self, gameobject: Dict[str, Any]) -> List[str]:
+        """Get a summary of the components on a GameObject.
+        
+        Args:
+            gameobject: The serialized GameObject
+            
+        Returns:
+            List of component type names
+        """
+        components = get_unity_components(gameobject)
+        summary = []
+        
+        for component in components:
+            type_info = extract_type_info(component)
+            if type_info and "unity_type" in type_info:
+                # Get the short name (without namespace)
+                full_type = type_info["unity_type"]
+                short_type = full_type.split(".")[-1] if "." in full_type else full_type
+                summary.append(short_type)
+                
+        return summary
+    
+    def _get_transform_data(self, gameobject: Dict[str, Any]) -> Dict[str, Any]:
+        """Extract transform data from a GameObject.
+        
+        Args:
+            gameobject: The serialized GameObject
+            
+        Returns:
+            Dictionary with position, rotation, and scale information
+        """
+        transform = find_component_by_type(gameobject, "Transform")
+        if not transform:
+            return {}
+            
+        result = {}
+        
+        # Try to get position, rotation, and scale using dot notation
+        position = serialization_utils.get_serialized_value(transform, "position")
+        if position:
+            result["position"] = position
+            
+        local_position = serialization_utils.get_serialized_value(transform, "localPosition")
+        if local_position:
+            result["localPosition"] = local_position
+            
+        rotation = serialization_utils.get_serialized_value(transform, "rotation")
+        if rotation:
+            result["rotation"] = rotation
+            
+        euler_angles = serialization_utils.get_serialized_value(transform, "eulerAngles")
+        if euler_angles:
+            result["eulerAngles"] = euler_angles
+            
+        local_scale = serialization_utils.get_serialized_value(transform, "localScale")
+        if local_scale:
+            result["localScale"] = local_scale
+            
+        return result
     
     @staticmethod
     def register_manage_gameobject_tools(mcp: FastMCP):

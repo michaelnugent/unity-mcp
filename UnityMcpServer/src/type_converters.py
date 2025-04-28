@@ -4,6 +4,9 @@ Unity Type Converters for MCP parameter validation and conversion.
 This module provides conversion functions for common Unity types to ensure
 proper serialization and deserialization between Python and Unity C#.
 Each converter handles validation and standardizes the format for the Unity bridge.
+
+The module also includes functions for handling enhanced serialized Unity objects
+with support for metadata, circular references, and hierarchical relationships.
 """
 
 from typing import Any, Dict, List, Tuple, Union, Optional
@@ -19,6 +22,25 @@ ColorType = Union[Dict[str, float], List[float], Tuple[float, float, float, floa
 RectType = Union[Dict[str, float], List[float], Tuple[float, float, float, float]]
 BoundsType = Union[Dict[str, Vector3Type], Dict[str, Any]]
 
+# Enhanced serialization metadata keys
+SERIALIZATION_STATUS_KEY = "__serialization_status"
+SERIALIZATION_ERROR_KEY = "__serialization_error"
+SERIALIZATION_TYPE_KEY = "__type"
+SERIALIZATION_UNITY_TYPE_KEY = "__unity_type"
+SERIALIZATION_PATH_KEY = "__path"
+SERIALIZATION_ID_KEY = "__id"
+SERIALIZATION_CIRCULAR_REF_KEY = "__circular_reference"
+SERIALIZATION_REF_PATH_KEY = "__reference_path"
+SERIALIZATION_DEPTH_KEY = "__serialization_depth"
+SERIALIZATION_PROPERTIES_KEY = "__serialized_properties"
+SERIALIZATION_FALLBACK_KEY = "__used_fallback"
+SERIALIZATION_CHILDREN_KEY = "__children"
+SERIALIZATION_COMPONENTS_KEY = "__components"
+
+# Serialization depth levels
+SERIALIZATION_DEPTH_BASIC = "Basic"
+SERIALIZATION_DEPTH_STANDARD = "Standard"
+SERIALIZATION_DEPTH_DEEP = "Deep"
 
 def convert_vector2(value: Vector2Type, param_name: str = "Vector2") -> Dict[str, float]:
     """Convert and validate a Vector2 parameter.
@@ -390,52 +412,35 @@ def convert_bounds(value: BoundsType, param_name: str = "Bounds") -> Dict[str, D
             f"{error_prefix}: {str(e)}"
         )
 
-# Enhanced serialization support
 def get_serialized_value(obj, property_path=None):
-    """
-    Extract a value from a serialized Unity object by property path.
+    """Get a value from a serialized object using dot notation property path.
     
     Args:
-        obj: The serialized Unity object (dictionary) containing serialization metadata
-        property_path: Property path in dot notation (e.g., "transform.position.x")
+        obj: The serialized object (dict)
+        property_path: Property path using dot notation (e.g., "transform.position.x")
         
     Returns:
-        The value at the given property path, or the object itself if no path is specified
-    
-    Raises:
-        KeyError: If the property path doesn't exist in the object
+        The value at the specified path, or None if not found
     """
-    if obj is None:
-        return None
+    if not isinstance(obj, dict) or not property_path:
+        return obj
         
-    # If no property path is specified, return the original object data
-    if not property_path:
-        # Return the data property if this is a SerializationResult
-        return obj.get('Data', obj)
-        
-    # Handle property path navigation
     parts = property_path.split('.')
     current = obj
     
-    # If this is a serialization result, start with Data property
-    if isinstance(current, dict) and 'Data' in current:
-        current = current['Data']
-        
-    # Navigate through the property path
     for part in parts:
         if isinstance(current, dict) and part in current:
             current = current[part]
         else:
-            raise KeyError(f"Property '{part}' not found in path '{property_path}'")
+            return None
             
     return current
 
 def is_serialized_unity_object(obj):
-    """
-    Check if an object is a serialized Unity object with enhanced serialization metadata.
+    """Check if an object is a serialized Unity object with enhanced metadata.
     
     Args:
-        obj: The object to check
+        obj: Object to check
         
     Returns:
         True if the object is a serialized Unity object, False otherwise
@@ -443,126 +448,116 @@ def is_serialized_unity_object(obj):
     if not isinstance(obj, dict):
         return False
         
-    # Check for serialization metadata properties
-    serialization_props = ['__serialization_status', '__serialization_depth', 'ObjectTypeName']
-    
-    # Either a direct object with metadata or a SerializationResult
-    if any(prop in obj for prop in serialization_props):
-        return True
-        
-    # Check if it's a serialization result (Data property with metadata inside)
-    if 'Data' in obj and isinstance(obj['Data'], dict):
-        return any(prop in obj['Data'] for prop in serialization_props)
-        
-    return False
+    # Check for serialization metadata keys that indicate enhanced serialization
+    return (SERIALIZATION_TYPE_KEY in obj or 
+            SERIALIZATION_UNITY_TYPE_KEY in obj or 
+            SERIALIZATION_STATUS_KEY in obj)
 
 def extract_type_info(obj):
-    """
-    Extract type information from a serialized Unity object.
+    """Extract type information from a serialized Unity object.
     
     Args:
-        obj: The serialized Unity object
+        obj: The serialized object
         
     Returns:
-        A tuple of (type_name, instance_id) where type_name is the full name of the object's type
-        and instance_id is the Unity instance ID if available, or None
+        Dict with type information, or None if not a serialized object
     """
     if not is_serialized_unity_object(obj):
-        return (None, None)
+        return None
         
-    # Handle both direct objects and SerializationResult objects
-    data = obj.get('Data', obj)
+    type_info = {}
     
-    type_name = data.get('ObjectTypeName')
-    instance_id = data.get('InstanceID')
-    
-    return (type_name, instance_id)
+    if SERIALIZATION_TYPE_KEY in obj:
+        type_info['type'] = obj[SERIALIZATION_TYPE_KEY]
+        
+    if SERIALIZATION_UNITY_TYPE_KEY in obj:
+        type_info['unity_type'] = obj[SERIALIZATION_UNITY_TYPE_KEY]
+        
+    if SERIALIZATION_ID_KEY in obj:
+        type_info['id'] = obj[SERIALIZATION_ID_KEY]
+        
+    if SERIALIZATION_PATH_KEY in obj:
+        type_info['path'] = obj[SERIALIZATION_PATH_KEY]
+        
+    return type_info
 
 def get_unity_components(serialized_gameobject):
-    """
-    Extract components from a serialized GameObject.
+    """Get all components from a serialized GameObject.
     
     Args:
-        serialized_gameobject: A serialized GameObject
+        serialized_gameobject: The serialized GameObject
         
     Returns:
-        A list of serialized component dictionaries, or an empty list if no components are found
+        List of component objects, or empty list if none found
     """
     if not is_serialized_unity_object(serialized_gameobject):
         return []
         
-    # Handle both direct objects and SerializationResult objects
-    data = serialized_gameobject.get('Data', serialized_gameobject)
-    
-    # Try to get components list
-    components = data.get('components', [])
-    
-    # If components is a list, return it
-    if isinstance(components, list):
-        return components
+    # Try to get components from the enhanced serialization format
+    if SERIALIZATION_COMPONENTS_KEY in serialized_gameobject:
+        return serialized_gameobject[SERIALIZATION_COMPONENTS_KEY]
         
-    return []
-    
+    # Fallback to older format or custom objects
+    components = []
+    for key, value in serialized_gameobject.items():
+        if (isinstance(value, dict) and 
+            is_serialized_unity_object(value) and 
+            key != SERIALIZATION_CHILDREN_KEY):
+            components.append(value)
+            
+    return components
+
 def get_unity_children(serialized_gameobject):
-    """
-    Extract children from a serialized GameObject.
+    """Get all children from a serialized GameObject.
     
     Args:
-        serialized_gameobject: A serialized GameObject
+        serialized_gameobject: The serialized GameObject
         
     Returns:
-        A list of serialized GameObject dictionaries representing the children, 
-        or an empty list if no children are found
+        List of child GameObjects, or empty list if none found
     """
     if not is_serialized_unity_object(serialized_gameobject):
         return []
         
-    # Handle both direct objects and SerializationResult objects
-    data = serialized_gameobject.get('Data', serialized_gameobject)
-    
-    # Try to get children list
-    children = data.get('children', [])
-    
-    # If children is a list, return it
-    if isinstance(children, list):
-        return children
+    # Try to get children from the enhanced serialization format
+    if SERIALIZATION_CHILDREN_KEY in serialized_gameobject:
+        return serialized_gameobject[SERIALIZATION_CHILDREN_KEY]
         
     return []
 
 def find_component_by_type(serialized_gameobject, component_type):
-    """
-    Find a component by type in a serialized GameObject.
+    """Find a component of a specific type in a serialized GameObject.
     
     Args:
-        serialized_gameobject: A serialized GameObject
-        component_type: The name of the component type to find
+        serialized_gameobject: The serialized GameObject
+        component_type: The type of component to find (e.g., "Transform", "Rigidbody")
         
     Returns:
-        The serialized component dictionary if found, or None if not found
+        The component object, or None if not found
     """
+    if not is_serialized_unity_object(serialized_gameobject) or not component_type:
+        return None
+        
     components = get_unity_components(serialized_gameobject)
     
     for component in components:
-        component_data = component.get('Data', component)
-        type_name = component_data.get('ObjectTypeName', '')
-        
-        # Check if the component type matches (case-insensitive)
-        if type_name.lower() == component_type.lower():
+        # Check for exact type match
+        if component.get(SERIALIZATION_UNITY_TYPE_KEY) == component_type:
             return component
-        
-        # Also check for short names without namespace
-        short_name = type_name.split('.')[-1] if '.' in type_name else type_name
-        if short_name.lower() == component_type.lower():
+            
+        # Check if the type name ends with the component type
+        # This handles namespace prefixes (e.g., "UnityEngine.Transform" matches "Transform")
+        type_name = component.get(SERIALIZATION_UNITY_TYPE_KEY, "")
+        if type_name.endswith(f".{component_type}") or type_name == component_type:
             return component
             
     return None
 
 def is_circular_reference(obj):
-    """
-    Check if an object is a circular reference.
+    """Check if a serialized object is a circular reference.
     
     Args:
-        obj: The object to check
+        obj: The serialized object
         
     Returns:
         True if the object is a circular reference, False otherwise
@@ -570,21 +565,68 @@ def is_circular_reference(obj):
     if not isinstance(obj, dict):
         return False
         
-    # Check for circular reference flag
-    circular_ref = obj.get('__circular_reference', False)
-    return bool(circular_ref)
+    return obj.get(SERIALIZATION_CIRCULAR_REF_KEY, False) is True
 
 def get_reference_path(obj):
-    """
-    Get the reference path for a circular reference.
+    """Get the reference path for a circular reference.
     
     Args:
-        obj: The circular reference object
+        obj: The serialized object
         
     Returns:
-        The reference path if the object is a circular reference, None otherwise
+        The reference path string, or None if not a circular reference
     """
     if not is_circular_reference(obj):
         return None
         
-    return obj.get('__reference_path') 
+    return obj.get(SERIALIZATION_REF_PATH_KEY)
+
+def get_serialization_depth(obj):
+    """Get the serialization depth of a serialized object.
+    
+    Args:
+        obj: The serialized object
+        
+    Returns:
+        The serialization depth string (Basic, Standard, Deep), or None if not specified
+    """
+    if not is_serialized_unity_object(obj):
+        return None
+        
+    return obj.get(SERIALIZATION_DEPTH_KEY)
+
+def extract_transform_data(serialized_gameobject):
+    """Extract Transform data from a serialized GameObject.
+    
+    Args:
+        serialized_gameobject: The serialized GameObject
+        
+    Returns:
+        Dict with position, rotation, and scale, or None if not found
+    """
+    transform = find_component_by_type(serialized_gameobject, "Transform")
+    if not transform:
+        return None
+        
+    result = {}
+    
+    # Extract position
+    position = get_serialized_value(transform, "position")
+    if isinstance(position, dict) and all(k in position for k in ['x', 'y', 'z']):
+        result['position'] = convert_vector3(position)
+        
+    # Extract rotation (could be quaternion or euler angles)
+    rotation = get_serialized_value(transform, "rotation")
+    if isinstance(rotation, dict) and all(k in rotation for k in ['x', 'y', 'z', 'w']):
+        result['rotation'] = convert_quaternion(rotation)
+    
+    euler = get_serialized_value(transform, "eulerAngles")
+    if not rotation and isinstance(euler, dict) and all(k in euler for k in ['x', 'y', 'z']):
+        result['eulerAngles'] = convert_vector3(euler)
+        
+    # Extract scale
+    scale = get_serialized_value(transform, "localScale")
+    if isinstance(scale, dict) and all(k in scale for k in ['x', 'y', 'z']):
+        result['scale'] = convert_vector3(scale)
+        
+    return result 

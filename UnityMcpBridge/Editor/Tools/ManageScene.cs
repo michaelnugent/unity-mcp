@@ -696,33 +696,21 @@ namespace UnityMcpBridge.Editor.Tools
                 // Set position if provided
                 if (position != null && position.Count >= 3)
                 {
-                    Vector3 pos = new Vector3(
-                        position[0].ToObject<float>(),
-                        position[1].ToObject<float>(),
-                        position[2].ToObject<float>()
-                    );
+                    Vector3 pos = UnityTypeHelper.ParseVector3(position);
                     instance.transform.position = pos;
                 }
 
                 // Set rotation if provided
                 if (rotation != null && rotation.Count >= 3)
                 {
-                    Vector3 rot = new Vector3(
-                        rotation[0].ToObject<float>(),
-                        rotation[1].ToObject<float>(),
-                        rotation[2].ToObject<float>()
-                    );
+                    Vector3 rot = UnityTypeHelper.ParseVector3(rotation);
                     instance.transform.eulerAngles = rot;
                 }
 
                 // Set scale if provided
                 if (scale != null && scale.Count >= 3)
                 {
-                    Vector3 scl = new Vector3(
-                        scale[0].ToObject<float>(),
-                        scale[1].ToObject<float>(),
-                        scale[2].ToObject<float>()
-                    );
+                    Vector3 scl = UnityTypeHelper.ParseVector3(scale);
                     instance.transform.localScale = scl;
                 }
 
@@ -788,11 +776,7 @@ namespace UnityMcpBridge.Editor.Tools
                     return Response.Error("Position array must contain 3 elements (x, y, z).");
                 }
 
-                Vector3 pos = new Vector3(
-                    position[0].ToObject<float>(),
-                    position[1].ToObject<float>(),
-                    position[2].ToObject<float>()
-                );
+                Vector3 pos = UnityTypeHelper.ParseVector3(position);
                 go.transform.position = pos;
 
                 return Response.Success($"GameObject '{gameObjectName}' moved to {pos}.", new {
@@ -821,11 +805,7 @@ namespace UnityMcpBridge.Editor.Tools
                     return Response.Error("Rotation array must contain 3 elements (x, y, z).");
                 }
 
-                Vector3 rot = new Vector3(
-                    rotation[0].ToObject<float>(),
-                    rotation[1].ToObject<float>(),
-                    rotation[2].ToObject<float>()
-                );
+                Vector3 rot = UnityTypeHelper.ParseVector3(rotation);
                 go.transform.eulerAngles = rot;
 
                 return Response.Success($"GameObject '{gameObjectName}' rotated to {rot}.", new {
@@ -854,11 +834,7 @@ namespace UnityMcpBridge.Editor.Tools
                     return Response.Error("Scale array must contain 3 elements (x, y, z).");
                 }
 
-                Vector3 scl = new Vector3(
-                    scale[0].ToObject<float>(),
-                    scale[1].ToObject<float>(),
-                    scale[2].ToObject<float>()
-                );
+                Vector3 scl = UnityTypeHelper.ParseVector3(scale);
                 go.transform.localScale = scl;
 
                 return Response.Success($"GameObject '{gameObjectName}' scaled to {scl}.", new {
@@ -1267,20 +1243,26 @@ namespace UnityMcpBridge.Editor.Tools
             if (targetType == typeof(bool) || targetType == typeof(bool?))
                 return token.ToObject<bool>();
                 
-            if (targetType == typeof(Vector2) && token is JArray arr && arr.Count >= 2)
-                return new Vector2(arr[0].ToObject<float>(), arr[1].ToObject<float>());
+            if (targetType == typeof(Vector2))
+                return UnityTypeHelper.ParseVector2(token);
                 
-            if (targetType == typeof(Vector3) && token is JArray arr3 && arr3.Count >= 3)
-                return new Vector3(arr3[0].ToObject<float>(), arr3[1].ToObject<float>(), arr3[2].ToObject<float>());
+            if (targetType == typeof(Vector3))
+                return UnityTypeHelper.ParseVector3(token);
                 
-            if (targetType == typeof(Vector4) && token is JArray arr4 && arr4.Count >= 4)
-                return new Vector4(arr4[0].ToObject<float>(), arr4[1].ToObject<float>(), arr4[2].ToObject<float>(), arr4[3].ToObject<float>());
+            if (targetType == typeof(Vector4))
+                return UnityTypeHelper.ParseVector4(token);
                 
-            if (targetType == typeof(Quaternion) && token is JArray arrQ && arrQ.Count >= 4)
-                return new Quaternion(arrQ[0].ToObject<float>(), arrQ[1].ToObject<float>(), arrQ[2].ToObject<float>(), arrQ[3].ToObject<float>());
+            if (targetType == typeof(Quaternion))
+                return UnityTypeHelper.ParseQuaternion(token);
                 
-            if (targetType == typeof(Color) && token is JArray arrC && arrC.Count >= 3)
-                return new Color(arrC[0].ToObject<float>(), arrC[1].ToObject<float>(), arrC[2].ToObject<float>(), arrC.Count > 3 ? arrC[3].ToObject<float>() : 1f);
+            if (targetType == typeof(Color))
+                return UnityTypeHelper.ParseColor(token);
+                
+            if (targetType == typeof(Rect))
+                return UnityTypeHelper.ParseRect(token);
+                
+            if (targetType == typeof(Bounds))
+                return UnityTypeHelper.ParseBounds(token);
                 
             // For enums, parse the string representation
             if (targetType.IsEnum)

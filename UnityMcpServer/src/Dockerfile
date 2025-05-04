@@ -11,13 +11,11 @@ WORKDIR /app
 # Install uv package manager
 RUN pip install uv
 
-# Copy required files
-COPY config.py /app/
-COPY server.py /app/
-COPY unity_connection.py /app/
-COPY pyproject.toml /app/
-COPY __init__.py /app/
-COPY tools/ /app/tools/
+# Create .dockerignore first if it doesn't exist
+# Should exclude: __pycache__, *.pyc, tests/, .pytest_cache/, etc.
+
+# Copy the Python package files
+COPY . /app/
 
 # Install dependencies using uv
 RUN uv pip install --system -e .

@@ -1051,66 +1051,45 @@ namespace UnityMcpBridge.Editor.Tools
                     return token.ToObject<float>();
                 if (targetType == typeof(bool))
                     return token.ToObject<bool>();
-                if (targetType == typeof(Vector2) && token is JArray arrV2 && arrV2.Count == 2)
-                    return new Vector2(arrV2[0].ToObject<float>(), arrV2[1].ToObject<float>());
-                if (targetType == typeof(Vector3) && token is JArray arrV3 && arrV3.Count == 3)
-                    return new Vector3(
-                        arrV3[0].ToObject<float>(),
-                        arrV3[1].ToObject<float>(),
-                        arrV3[2].ToObject<float>()
-                    );
-                if (targetType == typeof(Vector4) && token is JArray arrV4 && arrV4.Count == 4)
-                    return new Vector4(
-                        arrV4[0].ToObject<float>(),
-                        arrV4[1].ToObject<float>(),
-                        arrV4[2].ToObject<float>(),
-                        arrV4[3].ToObject<float>()
-                    );
-                if (targetType == typeof(Quaternion) && token is JArray arrQ && arrQ.Count == 4)
-                    return new Quaternion(
-                        arrQ[0].ToObject<float>(),
-                        arrQ[1].ToObject<float>(),
-                        arrQ[2].ToObject<float>(),
-                        arrQ[3].ToObject<float>()
-                    );
-                if (targetType == typeof(Color) && token is JArray arrC && arrC.Count >= 3) // Allow RGB or RGBA
-                    return new Color(
-                        arrC[0].ToObject<float>(),
-                        arrC[1].ToObject<float>(),
-                        arrC[2].ToObject<float>(),
-                        arrC.Count > 3 ? arrC[3].ToObject<float>() : 1.0f
-                    );
-                if (targetType.IsEnum)
-                    return Enum.Parse(targetType, token.ToString(), true); // Case-insensitive enum parsing
+                
+                // Replace direct Vector/Quaternion/Color conversions with UnityTypeHelper methods
+                if (targetType == typeof(Vector2))
+                    return UnityTypeHelper.ParseVector2(token);
+                if (targetType == typeof(Vector3))
+                    return UnityTypeHelper.ParseVector3(token);
+                if (targetType == typeof(Vector4))
+                    return UnityTypeHelper.ParseVector4(token);
+                if (targetType == typeof(Quaternion))
+                    return UnityTypeHelper.ParseQuaternion(token);
+                if (targetType == typeof(Color))
+                    return UnityTypeHelper.ParseColor(token);
+                if (targetType == typeof(Rect))
+                    return UnityTypeHelper.ParseRect(token);
+                if (targetType == typeof(Bounds))
+                    return UnityTypeHelper.ParseBounds(token);
 
+                // Handle enums
+                if (targetType.IsEnum)
+                    return Enum.Parse(targetType, token.ToString(), true);
+            
                 // Handle loading Unity Objects (Materials, Textures, etc.) by path
-                if (
-                    typeof(UnityEngine.Object).IsAssignableFrom(targetType)
-                    && token.Type == JTokenType.String
-                )
+                if (typeof(UnityEngine.Object).IsAssignableFrom(targetType) && token.Type == JTokenType.String)
                 {
                     string assetPath = SanitizeAssetPath(token.ToString());
-                    UnityEngine.Object loadedAsset = AssetDatabase.LoadAssetAtPath(
-                        assetPath,
-                        targetType
-                    );
+                    UnityEngine.Object loadedAsset = AssetDatabase.LoadAssetAtPath(assetPath, targetType);
                     if (loadedAsset == null)
                     {
-                        Debug.LogWarning(
-                            $"[ConvertJTokenToType] Could not load asset of type {targetType.Name} from path: {assetPath}"
-                        );
+                        Debug.LogWarning($"[ConvertJTokenToType] Could not load asset of type {targetType.Name} from path: {assetPath}");
                     }
                     return loadedAsset;
                 }
 
-                // Fallback: Try direct conversion (might work for other simple value types)
+                // Default fallback
                 return token.ToObject(targetType);
             }
             catch (Exception ex)
             {
-                Debug.LogWarning(
-                    $"[ConvertJTokenToType] Could not convert JToken '{token}' (type {token.Type}) to type '{targetType.Name}': {ex.Message}"
-                );
+                Debug.LogWarning($"[ConvertJTokenToType] Could not convert JToken '{token}' (type {token.Type}) to type '{targetType.Name}': {ex.Message}");
                 return null;
             }
         }

@@ -4,6 +4,9 @@ Defines the execute_menu_item tool for running Unity Editor menu commands.
 from typing import Dict, Any, Optional, List
 from mcp.server.fastmcp import FastMCP, Context
 from .base_tool import BaseTool
+from exceptions import ParameterValidationError
+# Import validation layer functions
+from .validation_layer import validate_menu_path
 
 class MenuItemTool(BaseTool):
     """Tool for executing Unity Editor menu items."""
@@ -16,12 +19,25 @@ class MenuItemTool(BaseTool):
         "get_available_menus": {},
     }
     
+    # Menu item operations don't typically use Unity-specific types, but for consistency with other tools:
+    vector2_params = []
+    vector3_params = []
+    euler_params = []
+    quaternion_params = []
+    color_params = []
+    rect_params = []
+    bounds_params = []
+    
     def additional_validation(self, action: str, params: Dict[str, Any]) -> None:
         """Additional validation specific to the menu item tool."""
-        if action == "execute" and not params.get("menuPath"):
-            raise ParameterValidationError(
-                f"{self.tool_name} 'execute' action requires 'menuPath' parameter"
-            )
+        if action == "execute":
+            if not params.get("menuPath"):
+                raise ParameterValidationError(
+                    f"{self.tool_name} 'execute' action requires 'menuPath' parameter"
+                )
+            
+            # Validate menu path format using the validation layer
+            validate_menu_path(params["menuPath"])
 
     @staticmethod
     def register_execute_menu_item_tools(mcp: FastMCP):
@@ -92,3 +108,27 @@ class MenuItemTool(BaseTool):
                 return await menu_tool.send_command_async("execute_menu_item", params_dict)
             except ParameterValidationError as e:
                 return {"success": False, "message": str(e), "validation_error": True} 
+
+def validate_menu_path(menu_path: Any) -> None:
+    """Validate a menu path parameter.
+
+    Args:
+        menu_path: The menu path to validate
+    
+    Returns:
+        None: This function doesn't return anything but raises exceptions on validation failure
+    
+    Raises:
+        ParameterValidationError: If validation fails
+    """
+    # Check type
+    if not isinstance(menu_path, str):
+        raise ParameterValidationError(f"Menu path must be a string, got {type(menu_path).__name__}: {menu_path}")
+    
+    # Check for empty path
+    if not menu_path:
+        raise ParameterValidationError("Menu path cannot be empty")
+    
+    # Check for menu separator
+    if "/" not in menu_path:
+        raise ParameterValidationError(f"Menu path must contain at least one '/' separator, got: {menu_path}") 

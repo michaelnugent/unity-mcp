@@ -44,7 +44,7 @@ def validate_vector3(value: Any, param_name: str) -> None:
         for i, component in enumerate(value):
             if not isinstance(component, (int, float)):
                 raise ParameterValidationError(
-                    f"{error_prefix}: Component {i} must be a number, got {type(component).__name__}"
+                    f"{error_prefix}: Component {i} must be a number, got {type(component).__name__} ({component})"
                 )
                 
     # Check if value is a dictionary with x,y,z keys
@@ -60,11 +60,11 @@ def validate_vector3(value: Any, param_name: str) -> None:
         for key in required_keys:
             if not isinstance(value[key], (int, float)):
                 raise ParameterValidationError(
-                    f"{error_prefix}: Component {key} must be a number, got {type(value[key]).__name__}"
+                    f"{error_prefix}: Component {key} must be a number, got {type(value[key]).__name__} ({value[key]})"
                 )
     else:
         raise ParameterValidationError(
-            f"{error_prefix}: Expected list, tuple or dict, got {type(value).__name__}"
+            f"{error_prefix}: Expected list, tuple or dict, got {type(value).__name__} ({value})"
         )
 
 def validate_required_param(params: Dict[str, Any], param_name: str, action: str, tool_name: str) -> None:
@@ -99,12 +99,22 @@ def validate_param_type(param: Any, param_name: str, expected_type: Union[type, 
         ParameterValidationError: If the parameter is not of the expected type
     """
     if param is not None and not isinstance(param, expected_type):
-        type_names = [t.__name__ for t in expected_type] if isinstance(expected_type, tuple) else [expected_type.__name__]
-        expected_type_str = ", ".join(type_names)
+        # Create a readable type expectation string
+        if isinstance(expected_type, tuple):
+            type_names = [t.__name__ for t in expected_type]
+            expected_type_str = " or ".join(type_names)
+        else:
+            expected_type_str = expected_type.__name__
+        
+        # Create a readable description of the actual value
+        actual_type_str = type(param).__name__
+        value_str = str(param)
+        if len(value_str) > 50:  # Truncate long values
+            value_str = value_str[:47] + "..."
         
         raise ParameterValidationError(
             f"{tool_name} '{action}' parameter '{param_name}' must be of type {expected_type_str}, "
-            f"got {type(param).__name__}"
+            f"got {actual_type_str}: {value_str}"
         )
 
 def validate_serialized_gameobject(value: Any, param_name: str) -> None:
@@ -124,7 +134,7 @@ def validate_serialized_gameobject(value: Any, param_name: str) -> None:
     
     if not isinstance(value, dict):
         raise ParameterValidationError(
-            f"{error_prefix}: Expected GameObject object, got {type(value).__name__}"
+            f"{error_prefix}: Expected GameObject object, got {type(value).__name__} ({value})"
         )
         
     if not is_serialized_unity_object(value):
@@ -172,7 +182,7 @@ def validate_serialized_component(value: Any, param_name: str, required_type: Op
     
     if not isinstance(value, dict):
         raise ParameterValidationError(
-            f"{error_prefix}: Expected Component object, got {type(value).__name__}"
+            f"{error_prefix}: Expected Component object, got {type(value).__name__} ({value})"
         )
         
     if not is_serialized_unity_object(value):
@@ -249,28 +259,24 @@ def validate_serialization_status(value: Any, param_name: str) -> None:
         param_name: Name of the parameter for error reporting
         
     Raises:
-        ParameterValidationError: If validation fails or serialization was not successful
+        ParameterValidationError: If the serialization status is not successful
     """
     if value is None:
         return  # Optional parameter
         
-    error_prefix = f"Invalid {param_name} value"
-    
     if not isinstance(value, dict):
         raise ParameterValidationError(
-            f"{error_prefix}: Expected serialized object, got {type(value).__name__}"
+            f"Invalid {param_name} value: Expected serialized object, got {type(value).__name__}"
         )
         
-    if not is_serialized_unity_object(value):
+    if SERIALIZATION_STATUS_KEY not in value:
         raise ParameterValidationError(
-            f"{error_prefix}: Value is not a serialized Unity object"
+            f"Invalid {param_name} value: Missing serialization status"
         )
-    
-    # Check for serialization status
-    if SERIALIZATION_STATUS_KEY in value:
-        status = value[SERIALIZATION_STATUS_KEY]
-        if status.lower() != "success":
-            error_message = value.get("__serialization_error", "Unknown serialization error")
-            raise ParameterValidationError(
-                f"{error_prefix}: Serialization failed with status '{status}': {error_message}"
-            ) 
+        
+    status = value.get(SERIALIZATION_STATUS_KEY)
+    if status != "success":
+        error_message = value.get("message", "Unknown serialization error")
+        raise ParameterValidationError(
+            f"Invalid {param_name} value: Serialization failed - {error_message}"
+        ) 

@@ -1,160 +1,224 @@
 """
-Defines the manage_editor tool for interacting with the Unity Editor.
+Defines tools for managing the Unity Editor through the MCP server.
+
+This module provides functionality for controlling the Unity Editor state and settings,
+including play mode, editor tools, and editor window management.
 """
 import asyncio
-from typing import Dict, Any, Optional, List, Union, Literal
+from typing import Dict, Any, List, Optional
 from mcp.server.fastmcp import FastMCP, Context
 from .base_tool import BaseTool
 from unity_connection import ParameterValidationError
+import serialization_utils
 
 class EditorTool(BaseTool):
-    """Tool for managing the Unity Editor."""
+    """Tool for managing Unity Editor state and settings."""
     
     tool_name = "manage_editor"
     
     # Define required parameters for each action
     required_params = {
-        "set_active_tool": {"toolName": str},
-        "add_tag": {"tagName": str},
-        "remove_tag": {"tagName": str},
-        "add_layer": {"layerName": str},
-        "remove_layer": {"layerName": str},
+        "get_state": {},
+        "enter_play_mode": {},
+        "exit_play_mode": {},
+        "pause": {},
+        "step": {},
+        "get_active_tool": {},
+        "set_active_tool": {"tool_name": str},
+        "get_selection": {},
+        "set_selection": {"object_paths": list},
+        "take_screenshot": {"save_path": str},
+        "set_editor_pref": {"pref_name": str, "pref_value": object, "pref_type": str},
+        "get_editor_pref": {"pref_name": str, "pref_type": str},
     }
     
-    def additional_validation(self, action: str, params: Dict[str, Any]) -> None:
-        """Additional validation specific to the editor tool."""
-        if action == "capture_screenshot" and "screenshotPath" not in params:
-            raise ParameterValidationError(
-                f"{self.tool_name} 'capture_screenshot' action requires 'screenshotPath' parameter"
-            )
+    # Define parameters that might contain Vector3 values for editor operations
+    vector3_params = ["camera_position", "gizmo_position"]
+    
+    # Define parameters that might contain Euler angles (will be converted to Quaternion)
+    euler_params = ["camera_rotation", "gizmo_rotation"]
+    
+    # Define parameters that might contain Color values for editor settings
+    color_params = ["wireframe_color", "selection_color", "background_color", "grid_color"]
+    
+    def post_process_response(self, response: Dict[str, Any], action: str, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Enhance response data with additional information.
+        
+        Args:
+            response: The raw response from Unity
+            action: The action that was performed
+            params: The parameters that were sent
             
+        Returns:
+            The processed response with enhanced data
+        """
+        # For successful responses, enhance with additional data
+        if response.get("success") and action in ["get_state", "get_selection", "get_active_tool", "get_editor_pref"]:
+            if "data" not in response:
+                response["data"] = {}
+            
+            # For state retrieval, add comprehensive state information
+            if action == "get_state":
+                # If data is not already present, add default state data
+                if not response["data"]:
+                    response["data"] = {
+                        "isPlaying": False,
+                        "isPaused": False,
+                        "activeScene": "Unknown",
+                        "scenePath": "",
+                        "selectedObjects": [],
+                        "activeTool": "None",
+                        "projectName": "Unknown",
+                        "editorVersion": "Unknown",
+                        "platform": "Unknown"
+                    }
+                
+                # Add message with information summary
+                play_state = "Playing" if response["data"].get("isPlaying") else "Editing"
+                pause_state = " (Paused)" if response["data"].get("isPaused") else ""
+                active_scene = response["data"].get("activeScene", "Unknown")
+                
+                response["message"] = f"Editor state retrieved. Mode: {play_state}{pause_state}, Scene: {active_scene}"
+            
+            # For selection retrieval, add selection details
+            elif action == "get_selection":
+                selection = response["data"].get("selectedObjects", [])
+                selection_count = len(selection)
+                
+                if selection_count == 0:
+                    response["message"] = "No objects selected"
+                elif selection_count == 1:
+                    response["message"] = f"1 object selected: {selection[0]}"
+                else:
+                    response["message"] = f"{selection_count} objects selected"
+                
+                # Make sure selectedObjects is always present
+                if "selectedObjects" not in response["data"]:
+                    response["data"]["selectedObjects"] = []
+            
+            # For active tool retrieval, add tool details
+            elif action == "get_active_tool":
+                tool_name = response["data"].get("activeTool", "Unknown")
+                response["message"] = f"Active tool: {tool_name}"
+                
+                # Make sure activeTool is always present
+                if "activeTool" not in response["data"]:
+                    response["data"]["activeTool"] = "Unknown"
+            
+            # For editor preference retrieval, include type information
+            elif action == "get_editor_pref":
+                pref_name = params.get("pref_name", "Unknown")
+                pref_value = response["data"].get("prefValue")
+                pref_type = response["data"].get("prefType", "Unknown")
+                
+                response["message"] = f"Editor preference '{pref_name}' ({pref_type}): {pref_value}"
+                
+                # Make sure preference data is always present
+                if "prefValue" not in response["data"]:
+                    response["data"]["prefValue"] = None
+                if "prefType" not in response["data"]:
+                    response["data"]["prefType"] = "Unknown"
+                if "prefName" not in response["data"]:
+                    response["data"]["prefName"] = pref_name
+        
+        return response
+
     @staticmethod
     def register_manage_editor_tools(mcp: FastMCP):
-        """Registers the manage_editor tool with the MCP server."""
-
+        """Register editor management tools with the MCP server.
+        
+        Args:
+            mcp: The FastMCP server to register with
+        """
         @mcp.tool()
         async def manage_editor(
             ctx: Context,
-            action: Literal['play', 'pause', 'stop', 'get_state', 'get_windows', 'get_active_tool', 
-                            'get_selection', 'set_active_tool', 'add_tag', 'remove_tag', 'get_tags', 
-                            'add_layer', 'remove_layer', 'get_layers'],
-            tagName: Optional[str] = None,
-            layerName: Optional[str] = None,
-            toolName: Optional[str] = None,
-            waitForCompletion: Optional[bool] = None,
-            playback_speed: Optional[float] = None,
-            frames: Optional[int] = None,
-            save_as_path: Optional[str] = None,
-            preferences_path: Optional[str] = None,
-            preferences_value: Optional[Union[str, int, float, bool, Dict[str, Any], List[Any]]] = None,
-            screenshot_path: Optional[str] = None,
-            screenshot_width: Optional[int] = None,
-            screenshot_height: Optional[int] = None,
-            camera_name: Optional[str] = None
+            action: str,
+            tool_name: Optional[str] = None,
+            object_paths: Optional[List[str]] = None,
+            save_path: Optional[str] = None,
+            pref_name: Optional[str] = None,
+            pref_value: Optional[Any] = None,
+            pref_type: Optional[str] = None,
+            supersize: Optional[int] = None,
+            width: Optional[int] = None,
+            height: Optional[int] = None,
+            capture_alpha: Optional[bool] = None,
+            disable_post_effects: Optional[bool] = None
         ) -> Dict[str, Any]:
-            """Manages and controls the Unity Editor state (play mode, preferences, etc).
-
-            This tool allows LLMs to control the Unity Editor programmatically, changing play mode,
-            adjusting settings, saving assets, capturing screenshots, and more. It provides a
-            high-level interface to common editor operations.
-
-            Args:
-                ctx: The MCP context, containing runtime information.
-                action: The editor action to perform. Valid options include:
-                    - 'play': Enter play mode
-                    - 'pause': Pause or resume play mode
-                    - 'stop': Exit play mode
-                    - 'get_state': Get current editor status (playing, paused, etc.)
-                    - 'get_windows': Get information about open editor windows
-                    - 'get_active_tool': Get the currently active tool
-                    - 'get_selection': Get information about the current selection
-                    - 'set_active_tool': Set the active tool (requires toolName)
-                    - 'add_tag': Add a tag to the project (requires tagName)
-                    - 'remove_tag': Remove a tag from the project (requires tagName)
-                    - 'get_tags': Get a list of all tags in the project
-                    - 'add_layer': Add a layer to the project (requires layerName)
-                    - 'remove_layer': Remove a layer from the project (requires layerName)
-                    - 'get_layers': Get a list of all layers in the project
-                tagName: Name of the tag to add or remove (for 'add_tag' and 'remove_tag' actions)
-                layerName: Name of the layer to add or remove (for 'add_layer' and 'remove_layer' actions)
-                toolName: Name of the tool to activate (for 'set_active_tool' action)
-                waitForCompletion: Whether to wait for completion of the action
-                playback_speed: Playback speed multiplier (e.g., 0.5 for half speed, 2.0 for double speed)
-                               Valid range is typically 0.0 to 10.0.
-                frames: Number of frames to step.
-                save_as_path: Path to save scene.
-                            Example: "Assets/Scenes/NewScene.unity"
-                preferences_path: Path for accessing editor or project preferences.
-                                Uses Unity's preference path format,
-                                e.g., "General/Auto Refresh" or "Editor/Script Changes While Playing".
-                preferences_value: Value to set for preferences or settings.
-                screenshot_path: File path for saving the screenshot. Should include filename and extension
-                               (e.g., "C:/temp/screenshot.png" or relative to project: "Assets/screenshot.png").
-                screenshot_width: Width of the screenshot in pixels. If not specified, uses the current game view size.
-                screenshot_height: Height of the screenshot in pixels. If not specified, uses the current game view size.
-                camera_name: Name of the camera to use for taking a screenshot. If not specified, uses the main camera.
-
-            Returns:
-                A dictionary with the following fields:
-                - success: Boolean indicating if the operation succeeded
-                - message: Success message if the operation was successful
-                - error: Error message if the operation failed
-                - data: Additional data about the operation result, which varies by action:
-                  - For 'get_state': Current editor state (e.g., {"isPlaying": true, "isPaused": false})
-                  - For 'get_windows': List of open editor windows
-                  - For 'get_active_tool': Information about the active tool
-                  - For 'get_selection': Information about the current selection
-                  - For 'get_tags': List of all tags in the project
-                  - For 'get_layers': List of all layers in the project
-                
-            Examples:
-                - Enter play mode:
-                  action="play"
-                  
-                - Pause play mode:
-                  action="pause"
-                  
-                - Get editor state:
-                  action="get_state"
-                  
-                - Get current selection:
-                  action="get_selection"
-                  
-                - Add a tag:
-                  action="add_tag", tagName="Enemy"
-                  
-                - Get all tags:
-                  action="get_tags"
-                  
-                - Add a layer:
-                  action="add_layer", layerName="Obstacles"
-            """
-            # Create tool instance
-            editor_tool = EditorTool(ctx)
+            """Manage Unity Editor state and settings.
             
-            # Prepare parameters for the C# handler (convert from Python snake_case to C# camelCase where needed)
-            params_dict = {
-                "action": action.lower(),
-                "tagName": tagName,
-                "layerName": layerName,
-                "toolName": toolName,
-                "waitForCompletion": waitForCompletion,
-                "playbackSpeed": playback_speed,
-                "frames": frames,
-                "saveAsPath": save_as_path,
-                "preferencesPath": preferences_path,
-                "preferencesValue": preferences_value,
-                "screenshotPath": screenshot_path,
-                "screenshotWidth": screenshot_width,
-                "screenshotHeight": screenshot_height,
-                "cameraName": camera_name
+            Args:
+                ctx: The MCP context
+                action: Action to perform:
+                    - get_state: Get the current editor state
+                    - enter_play_mode: Enter play mode
+                    - exit_play_mode: Exit play mode
+                    - pause: Pause the editor
+                    - step: Step the editor frame
+                    - get_active_tool: Get the current active editor tool
+                    - set_active_tool: Set the active editor tool
+                    - get_selection: Get the currently selected GameObjects
+                    - set_selection: Set the selection to the given GameObjects
+                    - take_screenshot: Take a screenshot
+                    - set_editor_pref: Set an editor preference
+                    - get_editor_pref: Get an editor preference
+                tool_name: Name of the editor tool to activate (for set_active_tool)
+                object_paths: List of GameObject paths to select (for set_selection)
+                save_path: Path to save screenshot to (for take_screenshot)
+                pref_name: Name of the editor preference (for get/set_editor_pref)
+                pref_value: Value to set the editor preference to (for set_editor_pref)
+                pref_type: Type of editor preference (for get/set_editor_pref)
+                supersize: Supersize factor for screenshot (for take_screenshot)
+                width: Width for screenshot (for take_screenshot)
+                height: Height for screenshot (for take_screenshot)
+                capture_alpha: Whether to capture alpha channel (for take_screenshot)
+                disable_post_effects: Whether to disable post-processing effects (for take_screenshot)
+                
+            Returns:
+                Success or failure with detailed state information when appropriate
+            """
+            # Create a tool instance with the context
+            tool = EditorTool(ctx)
+            
+            # Prepare parameters
+            params = {
+                "action": action,
             }
             
-            # Remove None values to avoid sending unnecessary nulls
-            params_dict = {k: v for k, v in params_dict.items() if v is not None}
-
-            try:
-                # Send command with validation through the tool
-                return await editor_tool.send_command_async("manage_editor", params_dict)
-            except ParameterValidationError as e:
-                return {"success": False, "message": str(e), "validation_error": True}
+            # Add optional parameters if specified
+            if tool_name is not None:
+                params["tool_name"] = tool_name
+                
+            if object_paths is not None:
+                params["object_paths"] = object_paths
+                
+            if save_path is not None:
+                params["save_path"] = save_path
+                
+            if pref_name is not None:
+                params["pref_name"] = pref_name
+                
+            if pref_value is not None:
+                params["pref_value"] = pref_value
+                
+            if pref_type is not None:
+                params["pref_type"] = pref_type
+                
+            if supersize is not None:
+                params["supersize"] = supersize
+                
+            if width is not None:
+                params["width"] = width
+                
+            if height is not None:
+                params["height"] = height
+                
+            if capture_alpha is not None:
+                params["capture_alpha"] = capture_alpha
+                
+            if disable_post_effects is not None:
+                params["disable_post_effects"] = disable_post_effects
+            
+            # Send the command to Unity
+            return await tool.send_command_async(tool.tool_name, params)

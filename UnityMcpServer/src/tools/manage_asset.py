@@ -6,6 +6,11 @@ from typing import Dict, Any, Optional, List, Union, Literal, TypedDict
 from mcp.server.fastmcp import FastMCP, Context
 from .base_tool import BaseTool
 from unity_connection import ParameterValidationError
+# Import validation layer functions
+from .validation_layer import (
+    validate_asset_path, validate_action, validate_parameters_by_action
+)
+import os
 
 class AssetInfo(TypedDict, total=False):
     """Type definition for asset information."""
@@ -45,17 +50,127 @@ class AssetTool(BaseTool):
         "set_bundle": {"path": str, "bundle_name": str},
     }
     
+    # Define parameters that might contain Vector2 values for asset properties
+    vector2_params = ["tiling", "offset", "texelSize", "textureDimensions"]
+    
+    # Define parameters that might contain Vector3 values for asset properties
+    vector3_params = ["position", "scale", "boundingBoxSize", "center"]
+    
+    # Define parameters that might contain Euler angles (will be converted to Quaternion)
+    euler_params = ["rotation"]
+    
+    # Define parameters that might contain Color values for asset properties
+    color_params = ["color", "specular", "emission", "rimColor", "backgroundColor", "tint"]
+    
+    # Define parameters that might contain Rect values for asset properties
+    rect_params = ["rect", "textureRect", "spriteRect", "uvRect"]
+    
+    # Valid asset types for validation
+    _valid_asset_types = [
+        "Material", "Texture", "Texture2D", "Cubemap", "Prefab", "Model", "FBX", 
+        "Animation", "AnimationClip", "AnimatorController", "AudioClip", "Font", 
+        "Script", "ScriptableObject", "Shader", "ComputeShader", "PhysicMaterial",
+        "PhysicsMaterial2D", "Scene", "Folder", "Sprite", "SpriteAtlas"
+    ]
+    
     def additional_validation(self, action: str, params: Dict[str, Any]) -> None:
         """Additional validation specific to the asset tool."""
-        if action == "modify" and "properties" not in params:
-            raise ParameterValidationError(
-                f"{self.tool_name} 'modify' action requires 'properties' parameter"
-            )
+        # Validate action is in supported actions
+        valid_actions = [
+            'import', 'create', 'modify', 'delete', 'duplicate', 'move', 'rename', 
+            'search', 'get_info', 'create_folder', 'get_components', 'export', 'copy', 
+            'get_dependencies', 'set_labels', 'get_labels', 'create_asset', 'find_assets', 
+            'refresh', 'save_assets', 'load_asset_at_path', 'set_bundle', 'get_bundle'
+        ]
+        validate_action(action, valid_actions)
         
-        if action in ["duplicate", "move", "rename", "copy"] and "destination" not in params and "destination_path" not in params:
+        # Validate path format for all actions requiring a path
+        if "path" in params and params.get("path"):
+            # For create/create_folder, path doesn't need to exist
+            must_exist = action not in ["create", "create_folder", "create_asset", "import"]
+            
+            # For actions that create specific asset types, validate appropriate extension
+            extension = None
+            if action in ["create", "create_asset"] and "asset_type" in params:
+                asset_type = params["asset_type"]
+                # Map asset types to extensions
+                extension_map = {
+                    "Material": ".mat",
+                    "Prefab": ".prefab",
+                    "Scene": ".unity",
+                    "AnimatorController": ".controller",
+                    "AnimationClip": ".anim",
+                    "Script": ".cs",
+                    "ScriptableObject": ".asset"
+                    # Add more mappings as needed
+                }
+                extension = extension_map.get(asset_type)
+            
+            # Validate the asset path
+            validate_asset_path(params["path"], must_exist=must_exist, extension=extension)
+        
+        # Validate destination path for actions that require it
+        if (action in ["duplicate", "move", "rename", "copy", "export"] and 
+            "destination" not in params and "destination_path" not in params):
             raise ParameterValidationError(
                 f"{self.tool_name} '{action}' action requires 'destination' or 'destination_path' parameter"
             )
+        
+        # Validate destination path format
+        if "destination" in params and params.get("destination"):
+            validate_asset_path(params["destination"], must_exist=False)
+        
+        if "destination_path" in params and params.get("destination_path"):
+            # For export, destination is outside project
+            if action == "export":
+                dest_path = params["destination_path"]
+                if not os.path.isabs(dest_path):
+                    raise ParameterValidationError(
+                        f"Export destination_path must be an absolute path outside the project: {dest_path}"
+                    )
+            else:
+                validate_asset_path(params["destination_path"], must_exist=False)
+        
+        # Validate properties for modify/create actions
+        if action in ["modify", "create", "create_asset"] and "properties" not in params:
+            raise ParameterValidationError(
+                f"{self.tool_name} '{action}' action requires 'properties' parameter"
+            )
+        
+        # Validate asset_type for create actions
+        if action in ["create", "create_asset"] and "asset_type" in params:
+            if params["asset_type"] not in self._valid_asset_types:
+                raise ParameterValidationError(
+                    f"Invalid asset_type: '{params['asset_type']}'. "
+                    f"Valid types include: {', '.join(self._valid_asset_types)}"
+                )
+        
+        # Validate labels for set_labels
+        if action == "set_labels" and "labels" in params:
+            if not isinstance(params["labels"], list):
+                raise ParameterValidationError(
+                    "labels parameter must be a list of strings"
+                )
+            
+            for label in params["labels"]:
+                if not isinstance(label, str):
+                    raise ParameterValidationError(
+                        f"All labels must be strings, got {type(label).__name__}"
+                    )
+        
+        # Validate bundle_name for set_bundle
+        if action == "set_bundle" and "bundle_name" in params:
+            if not isinstance(params["bundle_name"], str):
+                raise ParameterValidationError(
+                    f"bundle_name must be a string, got {type(params['bundle_name']).__name__}"
+                )
+            
+            # Bundle names should not contain invalid characters
+            invalid_chars = r'[<>:"/\\|?*]'
+            if any(c in params["bundle_name"] for c in invalid_chars):
+                raise ParameterValidationError(
+                    f"bundle_name contains invalid characters: '{params['bundle_name']}'"
+                )
     
     @staticmethod
     def register_manage_asset_tools(mcp: FastMCP):

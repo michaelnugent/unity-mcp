@@ -1,13 +1,15 @@
 """
-Defines the read_console tool for accessing Unity Editor console messages.
+Defines tools for reading or clearing the Unity Editor console output.
 """
-from typing import List, Dict, Any
+from typing import Dict, Any, Optional, List, Union, Literal
 from mcp.server.fastmcp import FastMCP, Context
 from .base_tool import BaseTool
-from exceptions import ParameterValidationError
+from unity_connection import ParameterValidationError
+# Import validation layer functions
+from .validation_layer import validate_action
 
 class ConsoleTool(BaseTool):
-    """Tool for reading and manipulating the Unity console."""
+    """Tool for reading and clearing the Unity console."""
     
     tool_name = "read_console"
     
@@ -17,28 +19,91 @@ class ConsoleTool(BaseTool):
         "clear": {},
     }
     
+    # Console operations don't typically use Unity-specific types, but for consistency with other tools:
+    vector2_params = []
+    vector3_params = []
+    euler_params = []
+    quaternion_params = []
+    color_params = []
+    rect_params = []
+    bounds_params = []
+    
+    # Valid message types for validation
+    _valid_message_types = ["error", "warning", "log", "exception", "assertion", "all"]
+    
+    # Valid format types for validation
+    _valid_formats = ["plain", "detailed", "json"]
+    
     def additional_validation(self, action: str, params: Dict[str, Any]) -> None:
         """Additional validation specific to the console tool."""
-        if action == "get" and "types" in params:
-            if not isinstance(params["types"], list):
+        # Validate action is in supported actions
+        valid_actions = ["get", "clear"]
+        validate_action(action, valid_actions)
+        
+        # Validate message types if specified
+        if "types" in params and params.get("types"):
+            types = params["types"]
+            if isinstance(types, list):
+                for msg_type in types:
+                    if msg_type not in self._valid_message_types:
+                        raise ParameterValidationError(
+                            f"Invalid message type: '{msg_type}'. "
+                            f"Valid types are: {', '.join(self._valid_message_types)}"
+                        )
+            elif isinstance(types, str):
+                if types not in self._valid_message_types:
+                    raise ParameterValidationError(
+                        f"Invalid message type: '{types}'. "
+                        f"Valid types are: {', '.join(self._valid_message_types)}"
+                    )
+        
+        # Validate format if specified
+        if "format" in params and params.get("format"):
+            format_val = params["format"]
+            if format_val not in self._valid_formats:
                 raise ParameterValidationError(
-                    f"{self.tool_name} 'get' parameter 'types' must be a list"
+                    f"Invalid format: '{format_val}'. "
+                    f"Valid formats are: {', '.join(self._valid_formats)}"
+                )
+        
+        # Validate count parameter
+        if "count" in params and params.get("count") is not None:
+            count = params["count"]
+            if not isinstance(count, int) or count <= 0:
+                raise ParameterValidationError(
+                    f"count must be a positive integer, got {count}"
+                )
+        
+        # Validate timestamp format if specified
+        if "since_timestamp" in params and params.get("since_timestamp"):
+            # Basic ISO 8601 timestamp validation
+            timestamp = params["since_timestamp"]
+            if not isinstance(timestamp, str):
+                raise ParameterValidationError(
+                    f"since_timestamp must be a string in ISO 8601 format, got {type(timestamp).__name__}"
+                )
+            
+            # Simple check for ISO 8601 format (YYYY-MM-DDTHH:MM:SS)
+            import re
+            if not re.match(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}', timestamp):
+                raise ParameterValidationError(
+                    f"since_timestamp must be in ISO 8601 format (YYYY-MM-DDTHH:MM:SS...), got '{timestamp}'"
                 )
 
     @staticmethod
     def register_read_console_tools(mcp: FastMCP):
-        """Registers the read_console tool with the MCP server."""
+        """Register console reading tools with the MCP server."""
 
         @mcp.tool()
         async def read_console(
             ctx: Context,
-            action: str = None,
-            types: List[str] = None,
-            count: int = None,
-            filter_text: str = None,
-            since_timestamp: str = None,
-            format: str = None,
-            include_stacktrace: bool = None
+            action: Optional[str] = "get",
+            types: Optional[Union[List[str], str]] = None,
+            count: Optional[int] = None,
+            filter_text: Optional[str] = None,
+            since_timestamp: Optional[str] = None,
+            format: Optional[str] = None,
+            include_stacktrace: Optional[bool] = None
         ) -> Dict[str, Any]:
             """Gets messages from or clears the Unity Editor console.
 
@@ -58,36 +123,33 @@ class ConsoleTool(BaseTool):
             # Create tool instance
             console_tool = ConsoleTool(ctx)
             
-            # Set defaults if values are None
-            action = action if action is not None else 'get'
-            types = types if types is not None else ['error', 'warning', 'log']
-            format = format if format is not None else 'detailed'
-            include_stacktrace = include_stacktrace if include_stacktrace is not None else True
-
-            # Normalize action if it's a string
-            if isinstance(action, str):
-                action = action.lower()
+            # Default action to 'get' if not specified
+            action = action.lower() if action else 'get'
             
-            # Prepare parameters for the C# handler
-            params_dict = {
+            # Prepare parameters for Unity
+            params = {
                 "action": action,
-                "types": types,
-                "count": count,
-                "filterText": filter_text,
-                "sinceTimestamp": since_timestamp,
-                "format": format.lower() if isinstance(format, str) else format,
-                "includeStacktrace": include_stacktrace
             }
-
-            # Remove None values unless it's 'count' (as None might mean 'all')
-            params_dict = {k: v for k, v in params_dict.items() if v is not None or k == 'count'} 
             
-            # Add count back if it was None, explicitly sending null might be important for C# logic
-            if 'count' not in params_dict:
-                 params_dict['count'] = None 
-
+            # Add optional parameters if they exist
+            if types is not None:
+                params["types"] = types
+            if count is not None:
+                params["count"] = count
+            if filter_text is not None:
+                params["filterText"] = filter_text
+            if since_timestamp is not None:
+                params["sinceTimestamp"] = since_timestamp
+            if format is not None:
+                params["format"] = format
+            if include_stacktrace is not None:
+                params["includeStacktrace"] = include_stacktrace
+            
+            # Send command to Unity
             try:
-                # Send command with validation through the tool
-                return await console_tool.send_command_async("read_console", params_dict)
+                response = await console_tool.send_command_async("read_console", params)
+                return response
             except ParameterValidationError as e:
-                return {"success": False, "message": str(e), "validation_error": True} 
+                return {"success": False, "message": str(e), "validation_error": True}
+            except Exception as e:
+                return {"success": False, "message": f"Error reading console: {str(e)}"} 

@@ -528,9 +528,24 @@ async def test_editor_tool_validation_error(registered_tool, mock_context, mock_
 
 def test_editor_tool_validation(editor_tool_instance, mock_unity_connection):
     """Test EditorTool class validation methods."""
-    # Test validation for capture_screenshot action without screenshotPath
-    with pytest.raises(ParameterValidationError, match="requires 'screenshotPath' parameter"):
-        editor_tool_instance.additional_validation("capture_screenshot", {})
-        
-    # Make sure the mock wasn't called unexpectedly
-    mock_unity_connection.send_command.assert_not_called() 
+    # Test validation for get_state action
+    params = {"action": "get_state"}
+    result = editor_tool_instance.validate_and_convert_params("get_state", params)
+    assert result == {"action": "get_state"}
+    
+    # Test play mode actions validation
+    params = {"action": "enter_play_mode"}
+    result = editor_tool_instance.validate_and_convert_params("enter_play_mode", params)
+    assert result == {"action": "enter_play_mode"}
+    
+    # Test setting editor preferences
+    params = {
+        "action": "set_editor_pref",
+        "pref_name": "test_pref",
+        "pref_value": "test_value",
+        "pref_type": "string"
+    }
+    result = editor_tool_instance.validate_and_convert_params("set_editor_pref", params)
+    assert result["pref_name"] == "test_pref"
+    assert result["pref_value"] == "test_value"
+    assert result["pref_type"] == "string" 

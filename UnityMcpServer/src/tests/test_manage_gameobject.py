@@ -364,13 +364,13 @@ async def test_gameobject_tool_class_validation(gameobject_tool_instance, mock_u
     """Test GameObjectTool class validation methods."""
     # Test valid prefab path
     gameobject_tool_instance.additional_validation("create", {
-        "saveAsPrefab": True, 
+        "saveAsPrefab": True,
         "prefabPath": "Assets/Prefabs/Test.prefab",
         "name": "Test"
     })
     
     # Test when prefabPath is missing and saveAsPrefab is true
-    with pytest.raises(ParameterValidationError, match="prefabPath.*must end with"):
+    with pytest.raises(ParameterValidationError, match="Invalid prefab path"):
         gameobject_tool_instance.additional_validation("create", {
             "saveAsPrefab": True,
             "prefabPath": "Assets/Prefabs/Test.txt",  # Invalid extension

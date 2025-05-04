@@ -67,63 +67,114 @@ class BaseTool:
         # Check required parameters based on action
         action_required = self.required_params.get(action, {})
         for param_name, param_type in action_required.items():
-            if param_name not in params:
-                raise ParameterValidationError(f"{self.tool_name} '{action}' action requires '{param_name}' parameter")
-            if params[param_name] is not None:  # Allow None values for optional params
-                validate_param_type(params[param_name], param_name, param_type, action, self.tool_name)
+            try:
+                if param_name not in params:
+                    raise ParameterValidationError(f"{self.tool_name} '{action}' action requires '{param_name}' parameter")
+                if params[param_name] is not None:  # Allow None values for optional params
+                    validate_param_type(params[param_name], param_name, param_type, action, self.tool_name)
+            except ParameterValidationError as e:
+                # Re-raise with the original error message to preserve parameter information
+                raise ParameterValidationError(str(e))
         
         # Convert Vector2 parameters
         for param_name in self.vector2_params:
             if param_name in params and params[param_name] is not None:
-                converted_params[param_name] = convert_vector2(params[param_name], param_name)
+                try:
+                    converted_params[param_name] = convert_vector2(params[param_name], param_name)
+                except Exception as e:
+                    # Provide a clear error message that references the specific parameter
+                    raise ParameterValidationError(f"Failed to convert {param_name} to Vector2: {str(e)}")
         
         # Convert Vector3 parameters
         for param_name in self.vector3_params:
             if param_name in params and params[param_name] is not None:
-                converted_params[param_name] = convert_vector3(params[param_name], param_name)
+                try:
+                    converted_params[param_name] = convert_vector3(params[param_name], param_name)
+                except Exception as e:
+                    # Provide a clear error message that references the specific parameter
+                    raise ParameterValidationError(f"Failed to convert {param_name} to Vector3: {str(e)}")
         
         # Convert Quaternion parameters
         for param_name in self.quaternion_params:
             if param_name in params and params[param_name] is not None:
-                converted_params[param_name] = convert_quaternion(params[param_name], param_name)
+                try:
+                    converted_params[param_name] = convert_quaternion(params[param_name], param_name)
+                except Exception as e:
+                    # Provide a clear error message that references the specific parameter
+                    raise ParameterValidationError(f"Failed to convert {param_name} to Quaternion: {str(e)}")
         
         # Convert Euler angles to Quaternion
         for param_name in self.euler_params:
             if param_name in params and params[param_name] is not None:
-                converted_params[param_name] = euler_to_quaternion(params[param_name])
+                try:
+                    converted_params[param_name] = euler_to_quaternion(params[param_name])
+                except Exception as e:
+                    # Provide a clear error message that references the specific parameter
+                    raise ParameterValidationError(f"Failed to convert {param_name} Euler angles to Quaternion: {str(e)}")
         
         # Convert Color parameters
         for param_name in self.color_params:
             if param_name in params and params[param_name] is not None:
-                converted_params[param_name] = convert_color(params[param_name], param_name)
+                try:
+                    converted_params[param_name] = convert_color(params[param_name], param_name)
+                except Exception as e:
+                    # Provide a clear error message that references the specific parameter
+                    raise ParameterValidationError(f"Failed to convert {param_name} to Color: {str(e)}")
         
         # Convert Rect parameters
         for param_name in self.rect_params:
             if param_name in params and params[param_name] is not None:
-                converted_params[param_name] = convert_rect(params[param_name], param_name)
+                try:
+                    converted_params[param_name] = convert_rect(params[param_name], param_name)
+                except Exception as e:
+                    # Provide a clear error message that references the specific parameter
+                    raise ParameterValidationError(f"Failed to convert {param_name} to Rect: {str(e)}")
         
         # Convert Bounds parameters
         for param_name in self.bounds_params:
             if param_name in params and params[param_name] is not None:
-                converted_params[param_name] = convert_bounds(params[param_name], param_name)
+                try:
+                    converted_params[param_name] = convert_bounds(params[param_name], param_name)
+                except Exception as e:
+                    # Provide a clear error message that references the specific parameter
+                    raise ParameterValidationError(f"Failed to convert {param_name} to Bounds: {str(e)}")
         
         # Validate GameObject parameters
         for param_name in self.gameobject_params:
             if param_name in params and params[param_name] is not None:
-                validate_serialized_gameobject(params[param_name], param_name)
+                try:
+                    validate_serialized_gameobject(params[param_name], param_name)
+                except Exception as e:
+                    # Provide a clear error message that references the specific parameter
+                    raise ParameterValidationError(f"Invalid {param_name} GameObject: {str(e)}")
         
         # Validate Component parameters
         for param_name in self.component_params:
             if param_name in params and params[param_name] is not None:
-                validate_serialized_component(params[param_name], param_name)
+                try:
+                    validate_serialized_component(params[param_name], param_name)
+                except Exception as e:
+                    # Provide a clear error message that references the specific parameter
+                    raise ParameterValidationError(f"Invalid {param_name} Component: {str(e)}")
         
         # Validate Transform parameters
         for param_name in self.transform_params:
             if param_name in params and params[param_name] is not None:
-                validate_serialized_transform(params[param_name], param_name)
+                try:
+                    validate_serialized_transform(params[param_name], param_name)
+                except Exception as e:
+                    # Provide a clear error message that references the specific parameter
+                    raise ParameterValidationError(f"Invalid {param_name} Transform: {str(e)}")
         
         # Allow subclasses to add more specific validation and conversion
-        self.additional_validation(action, converted_params)
+        try:
+            self.additional_validation(action, converted_params)
+        except ParameterValidationError as e:
+            # Pass through validation errors from additional_validation
+            raise ParameterValidationError(str(e))
+        except Exception as e:
+            # Wrap other exceptions in ParameterValidationError
+            raise ParameterValidationError(f"Validation error in additional_validation: {str(e)}")
         
         return converted_params
     
@@ -251,18 +302,19 @@ class BaseTool:
         
         Args:
             action: The current action being performed
-            params: Parameters to validate
+            params: Parameters to check
             
         Returns:
-            True if Unity-side validation is needed, False otherwise
+            True if Unity-side validation is needed, False if all validation can be done locally
         """
-        # By default, all validation-only requests go to Unity
-        # Subclasses can override this to optimize performance by handling
-        # more validations on the Python side
+        # By default, assume we need Unity validation
+        # Subclasses can override this to avoid unnecessary Unity communication
         return True
     
     async def send_command_async(self, command_type: str, params: Dict[str, Any] = None) -> Dict[str, Any]:
-        """Send a command to Unity with parameter validation asynchronously.
+        """Send a command to Unity asynchronously with parameter validation and conversion.
+        
+        This is an async wrapper around send_command that runs the synchronous code in a thread pool.
         
         Args:
             command_type: The type of command to send
@@ -274,14 +326,8 @@ class BaseTool:
         Raises:
             ParameterValidationError: If parameters fail validation
         """
-        # Get the current asyncio event loop
-        loop = asyncio.get_running_loop()
-        
-        # Run the synchronous send_command in the default executor (thread pool)
-        # This prevents blocking the main async event loop
+        # Run the synchronous send_command in a thread pool to avoid blocking
+        loop = asyncio.get_event_loop()
         return await loop.run_in_executor(
-            None,  # Use default executor
-            self.send_command,  # The function to call
-            command_type,  # First argument for send_command
-            params  # Second argument for send_command
+            None, self.send_command, command_type, params
         ) 

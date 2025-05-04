@@ -4,6 +4,8 @@ from .base_tool import BaseTool
 import os
 import base64
 from exceptions import ParameterValidationError
+# Import the validation layer functions
+from .validation_layer import validate_script_code, validate_asset_path
 
 class ScriptTool(BaseTool):
     """Tool for managing Unity scripts."""
@@ -18,13 +20,44 @@ class ScriptTool(BaseTool):
         "delete": {"name": str, "path": str},
     }
     
+    # Script operations don't typically use Unity-specific types, but for consistency with other tools:
+    vector2_params = []
+    vector3_params = []
+    euler_params = []
+    quaternion_params = []
+    color_params = []
+    rect_params = []
+    bounds_params = []
+    
     def additional_validation(self, action: str, params: Dict[str, Any]) -> None:
         """Additional validation specific to the script tool."""
         if action in ["create", "update"]:
+            # Check for contents or encodedContents
             if not params.get("contents") and not params.get("encodedContents"):
                 raise ParameterValidationError(
                     f"{self.tool_name} '{action}' action requires 'contents' parameter"
                 )
+            
+            # Validate script contents if provided directly (not encoded)
+            if params.get("contents") and params.get("scriptType"):
+                validate_script_code(
+                    params["contents"], 
+                    params.get("scriptType", "MonoBehaviour")
+                )
+            
+            # Validate script name for C# standards
+            if params.get("name") and not params["name"].endswith(".cs"):
+                # Check for valid C# identifier name 
+                import re
+                if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', params["name"]):
+                    raise ParameterValidationError(
+                        f"Script name '{params['name']}' must be a valid C# identifier "
+                        f"(starting with letter or underscore, containing only letters, numbers, and underscores)"
+                    )
+        
+        # Validate path format for all actions
+        if params.get("path"):
+            validate_asset_path(params["path"], must_exist=(action != "create"))
 
     @staticmethod
     def register_manage_script_tools(mcp: FastMCP):
@@ -100,3 +133,23 @@ class ScriptTool(BaseTool):
             except Exception as e:
                 # Handle Python-side errors (e.g., connection issues)
                 return {"success": False, "message": f"Python error managing script: {str(e)}"}
+
+def validate_script_code(code: Any) -> None:
+    """Validate a script code parameter.
+
+    Args:
+        code: The script code to validate
+    
+    Returns:
+        None: This function doesn't return anything but raises exceptions on validation failure
+    
+    Raises:
+        ParameterValidationError: If validation fails
+    """
+    # Check type
+    if not isinstance(code, str):
+        raise ParameterValidationError(f"Script code must be a string, got {type(code).__name__}: {code}")
+    
+    # Check for empty code
+    if not code:
+        raise ParameterValidationError("Script code cannot be empty")

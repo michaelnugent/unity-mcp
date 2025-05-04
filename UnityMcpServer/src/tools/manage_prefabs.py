@@ -27,7 +27,10 @@ class PrefabsTool(BaseTool):
     }
     
     # Define parameters that should be validated as Vector3
-    vector3_params = ["position", "rotation", "scale"]
+    vector3_params = ["position", "scale"]
+    
+    # Define parameters that should be validated as Euler angles (will be converted to Quaternion)
+    euler_params = ["rotation"]
     
     def additional_validation(self, action: str, params: Dict[str, Any]) -> None:
         """Additional validation specific to the prefabs tool."""

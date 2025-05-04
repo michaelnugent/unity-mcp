@@ -1863,36 +1863,21 @@ namespace UnityMcpBridge.Editor.Tools
                 if (targetType == typeof(bool))
                     return token.ToObject<bool>();
 
-                // Vector/Quaternion/Color types
-                if (targetType == typeof(Vector2) && token is JArray arrV2 && arrV2.Count == 2)
-                    return new Vector2(arrV2[0].ToObject<float>(), arrV2[1].ToObject<float>());
-                if (targetType == typeof(Vector3) && token is JArray arrV3 && arrV3.Count == 3)
-                    return new Vector3(
-                        arrV3[0].ToObject<float>(),
-                        arrV3[1].ToObject<float>(),
-                        arrV3[2].ToObject<float>()
-                    );
-                if (targetType == typeof(Vector4) && token is JArray arrV4 && arrV4.Count == 4)
-                    return new Vector4(
-                        arrV4[0].ToObject<float>(),
-                        arrV4[1].ToObject<float>(),
-                        arrV4[2].ToObject<float>(),
-                        arrV4[3].ToObject<float>()
-                    );
-                if (targetType == typeof(Quaternion) && token is JArray arrQ && arrQ.Count == 4)
-                    return new Quaternion(
-                        arrQ[0].ToObject<float>(),
-                        arrQ[1].ToObject<float>(),
-                        arrQ[2].ToObject<float>(),
-                        arrQ[3].ToObject<float>()
-                    );
-                if (targetType == typeof(Color) && token is JArray arrC && arrC.Count >= 3) // Allow RGB or RGBA
-                    return new Color(
-                        arrC[0].ToObject<float>(),
-                        arrC[1].ToObject<float>(),
-                        arrC[2].ToObject<float>(),
-                        arrC.Count > 3 ? arrC[3].ToObject<float>() : 1.0f
-                    );
+                // Replace direct Vector/Quaternion/Color conversions with UnityTypeHelper methods
+                if (targetType == typeof(Vector2))
+                    return UnityTypeHelper.ParseVector2(token);
+                if (targetType == typeof(Vector3))
+                    return UnityTypeHelper.ParseVector3(token);
+                if (targetType == typeof(Vector4))
+                    return UnityTypeHelper.ParseVector4(token);
+                if (targetType == typeof(Quaternion))
+                    return UnityTypeHelper.ParseQuaternion(token);
+                if (targetType == typeof(Color))
+                    return UnityTypeHelper.ParseColor(token);
+                if (targetType == typeof(Rect))
+                    return UnityTypeHelper.ParseRect(token);
+                if (targetType == typeof(Bounds))
+                    return UnityTypeHelper.ParseBounds(token);
 
                 // Enum types
                 if (targetType.IsEnum)
@@ -2093,19 +2078,15 @@ namespace UnityMcpBridge.Editor.Tools
         /// </summary>
         private static Vector3? ParseVector3(JArray array)
         {
-            if (array != null && array.Count == 3)
+            if (array != null)
             {
                 try
                 {
-                    return new Vector3(
-                        array[0].ToObject<float>(),
-                        array[1].ToObject<float>(),
-                        array[2].ToObject<float>()
-                    );
+                    // Use UnityTypeHelper.ParseVector3 instead of direct parsing
+                    return UnityTypeHelper.ParseVector3(array);
                 }
                 catch
-                { /* Ignore parsing errors */
-                }
+                { /* Ignore parsing errors */ }
             }
             return null;
         }

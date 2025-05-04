@@ -6,6 +6,11 @@ from typing import Dict, Any, Optional, List, Union, Literal, Tuple
 from mcp.server.fastmcp import FastMCP, Context
 from .base_tool import BaseTool
 from exceptions import ParameterValidationError
+# Import the validation layer functions
+from .validation_layer import (
+    validate_asset_path, validate_gameobject_path, 
+    validate_component_type, validate_screenshot_path
+)
 
 class SceneTool(BaseTool):
     """Tool for managing Unity scenes."""
@@ -31,14 +36,54 @@ class SceneTool(BaseTool):
     }
     
     # Define parameters that should be validated as Vector3
-    vector3_params = ["position", "rotation", "scale"]
+    vector3_params = ["position", "scale"]
+    
+    # Define parameters that should be validated as Euler angles (will be converted to Quaternion)
+    euler_params = ["rotation"]
     
     def additional_validation(self, action: str, params: Dict[str, Any]) -> None:
         """Additional validation specific to the scene tool."""
-        if action == "add_to_build" and "path" not in params:
-            raise ParameterValidationError(
-                f"{self.tool_name} 'add_to_build' action requires 'path' parameter"
+        # Validate paths for scene files
+        if action in ["open", "save_as", "add_to_build"] and "path" in params:
+            validate_asset_path(
+                params["path"], 
+                must_exist=(action == "open"), 
+                extension=".unity"
             )
+        
+        # Validate prefab path
+        if action == "instantiate" and "prefab_path" in params:
+            validate_asset_path(
+                params["prefab_path"], 
+                must_exist=True, 
+                extension=".prefab"
+            )
+        
+        # Validate GameObject references
+        if "game_object_name" in params and params.get("game_object_name"):
+            validate_gameobject_path(
+                params["game_object_name"],
+                must_exist=(action not in ["instantiate"])
+            )
+        
+        # Validate parent name if provided
+        if "parent_name" in params and params.get("parent_name"):
+            validate_gameobject_path(params["parent_name"], must_exist=True)
+        
+        # Validate component type
+        if "component_type" in params and params.get("component_type"):
+            validate_component_type(params["component_type"])
+        
+        # Validate screenshot path
+        if action == "capture_screenshot" and "screenshot_path" in params:
+            validate_screenshot_path(params["screenshot_path"])
+        
+        # Validate component properties format
+        if action == "set_component" and "component_properties" in params:
+            if not isinstance(params["component_properties"], dict):
+                raise ParameterValidationError(
+                    f"component_properties must be a dictionary of property names and values"
+                )
     
     def needs_unity_validation(self, action: str, params: Dict[str, Any]) -> bool:
         """Determine if a validate_only request needs to go to Unity for validation.
@@ -229,3 +274,79 @@ class SceneTool(BaseTool):
                 return await scene_tool.send_command_async("manage_scene", params_dict)
             except ParameterValidationError as e:
                 return {"success": False, "message": str(e), "validation_error": True}
+
+def validate_component_type(component_type: Any) -> None:
+    """Validate a component type parameter.
+
+    Args:
+        component_type: The component type to validate
+    
+    Returns:
+        None: This function doesn't return anything but raises exceptions on validation failure
+    
+    Raises:
+        ParameterValidationError: If validation fails
+    """
+    # Check type
+    if not isinstance(component_type, str):
+        raise ParameterValidationError(f"Component type must be a string, got {type(component_type).__name__}: {component_type}")
+    
+    # Check for empty type
+    if not component_type:
+        raise ParameterValidationError("Component type cannot be empty")
+    
+    # Validate component type format (should be like UnityEngine.Transform or FullNamespace.ComponentName)
+    if not ("." in component_type and component_type.split(".")[-1] and component_type.split(".")[0]):
+        raise ParameterValidationError(f"Component type must be in format 'Namespace.ComponentName', got: {component_type}")
+
+def validate_gameobject_path(path: Any, must_exist: bool = False) -> None:
+    """Validate a GameObject path parameter.
+
+    Args:
+        path: The path value to validate
+        must_exist: Whether the GameObject must exist (cannot be validated client-side, only format check)
+    
+    Returns:
+        None: This function doesn't return anything but raises exceptions on validation failure
+    
+    Raises:
+        ParameterValidationError: If validation fails
+    """
+    # Check type
+    if not isinstance(path, str):
+        raise ParameterValidationError(f"GameObject path must be a string, got {type(path).__name__}: {path}")
+    
+    # Check for empty path
+    if not path:
+        raise ParameterValidationError("GameObject path cannot be empty")
+    
+    # Check for valid path format (should not contain invalid characters like \ or ")
+    invalid_chars = ['\\', '"', '*', '<', '>', '|', ':', '?']
+    for char in invalid_chars:
+        if char in path:
+            raise ParameterValidationError(f"GameObject path contains invalid character '{char}': {path}")
+
+def validate_screenshot_path(path: Any) -> None:
+    """Validate a screenshot save path parameter.
+
+    Args:
+        path: The path to validate
+    
+    Returns:
+        None: This function doesn't return anything but raises exceptions on validation failure
+    
+    Raises:
+        ParameterValidationError: If validation fails
+    """
+    # Check type
+    if not isinstance(path, str):
+        raise ParameterValidationError(f"Screenshot path must be a string, got {type(path).__name__}: {path}")
+    
+    # Check for empty path
+    if not path:
+        raise ParameterValidationError("Screenshot path cannot be empty")
+    
+    # Check file extension
+    valid_extensions = ['.png', '.jpg', '.jpeg']
+    if not any(path.lower().endswith(ext) for ext in valid_extensions):
+        raise ParameterValidationError(f"Screenshot path must end with one of {valid_extensions}, got: {path}")

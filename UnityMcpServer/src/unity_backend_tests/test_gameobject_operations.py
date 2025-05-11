@@ -327,7 +327,7 @@ class TestGameObjectOperations:
         """Test modifying a GameObject using object format for vectors.
         
         This test verifies that GameObject parameters like position and rotation
-        can be updated using object format.
+        can be updated using array format.
         
         Args:
             unity_conn: The Unity connection fixture
@@ -343,12 +343,12 @@ class TestGameObjectOperations:
         })
         assert gameobject["success"] is True
         
-        # Modify using object format
+        # Modify using array format
         modify_result = self.gameobject_tool.send_command("manage_gameobject", {
             "action": "modify",
             "target": "TestModifyObject",
-            "position": {"x": 5, "y": 10, "z": 15},
-            "rotation": {"x": 30, "y": 60, "z": 90}
+            "position": [5, 10, 15],
+            "rotation": [30, 60, 90]
         })
         assert modify_result["success"] is True
         logger.info(f"Modify GameObject result: {modify_result}")
@@ -363,4 +363,50 @@ class TestGameObjectOperations:
         
         # Since we may not have the position in the response, we'll just log it
         # and verify that the operation succeeded
-        logger.info(f"ModifyObject operation completed successfully") 
+        logger.info(f"ModifyObject operation completed successfully")
+
+    def test_vector3_object_format(self, unity_conn, cleanup_gameobjects):
+        """Test Vector3 parameters using the object format.
+        
+        This test verifies that GameObject's Vector3 parameters (position, rotation, scale)
+        can be properly set using the object format {"x": x, "y": y, "z": z}, which is
+        more expressive and self-documenting than array format.
+        
+        Args:
+            unity_conn: The Unity connection fixture
+            cleanup_gameobjects: Fixture to clean up test GameObjects after the test
+        """
+        # Use the real Unity connection
+        self.gameobject_tool.unity_conn = unity_conn
+        
+        # Create a GameObject for testing Vector3 object format
+        gameobject = self.gameobject_tool.send_command("manage_gameobject", {
+            "action": "create",
+            "name": "TestVector3ObjectFormat"
+        })
+        assert gameobject["success"] is True
+        
+        # Modify using object format for Vector3 parameters
+        modify_result = self.gameobject_tool.send_command("manage_gameobject", {
+            "action": "modify",
+            "target": "TestVector3ObjectFormat",
+            "position": {"x": 5, "y": 10, "z": 15},
+            "rotation": {"x": 30, "y": 60, "z": 90},
+            "scale": {"x": 0.5, "y": 1.0, "z": 1.5}
+        })
+        
+        # Log the result of the modification
+        logger.info(f"Vector3 object format result: {modify_result}")
+        
+        # Check if the modification was successful
+        assert modify_result["success"] is True, "Vector3 object format should be supported"
+        
+        # Verify the GameObject still exists and can be found
+        find_result = self.gameobject_tool.send_command("manage_gameobject", {
+            "action": "find",
+            "search_term": "TestVector3ObjectFormat"
+        })
+        assert find_result["success"] is True
+        
+        # Log successful completion of the test
+        logger.info("Vector3 object format test completed successfully") 

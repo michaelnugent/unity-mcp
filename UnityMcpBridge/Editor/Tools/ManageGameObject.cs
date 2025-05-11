@@ -21,7 +21,7 @@ namespace UnityMcpBridge.Editor.Tools
 
         static ManageGameObject()
         {
-            CommandRegistry.RegisterCommand("manage_game_object", HandleCommand);
+            CommandRegistry.RegisterCommand("manage_gameobject", HandleCommand);
         }
 
         /// <summary>

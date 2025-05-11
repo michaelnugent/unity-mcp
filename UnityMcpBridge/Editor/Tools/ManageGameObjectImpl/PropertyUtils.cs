@@ -583,5 +583,38 @@ namespace UnityMcpBridge.Editor.Tools.ManageGameObjectImpl
             }
             return null;
         }
+
+        /// <summary>
+        /// Parses a JObject like {"x": 1, "y": 2, "z": 3} into a Vector3.
+        /// </summary>
+        public static Vector3? ParseVector3(JObject obj)
+        {
+            if (obj != null)
+            {
+                try
+                {
+                    Debug.Log($"[MCP-DEBUG] ParseVector3 input object: {obj}");
+                    
+                    // Extract x, y, z components from the JObject
+                    float x = obj["x"]?.Value<float>() ?? 0f;
+                    float y = obj["y"]?.Value<float>() ?? 0f;
+                    float z = obj["z"]?.Value<float>() ?? 0f;
+                    
+                    Vector3 result = new Vector3(x, y, z);
+                    Debug.Log($"[MCP-DEBUG] ParseVector3 result from object: {result}");
+                    return result;
+                }
+                catch (Exception e)
+                {
+                    Debug.LogError($"[MCP-DEBUG] ParseVector3 error from object: {e.Message}");
+                    /* Ignore parsing errors */
+                }
+            }
+            else
+            {
+                Debug.LogWarning("[MCP-DEBUG] ParseVector3 received null object");
+            }
+            return null;
+        }
     }
 } 

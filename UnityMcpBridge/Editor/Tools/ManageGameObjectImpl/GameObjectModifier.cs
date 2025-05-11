@@ -156,9 +156,39 @@ namespace UnityMcpBridge.Editor.Tools.ManageGameObjectImpl
             }
 
             // Set Transform Properties
-            Vector3? position = PropertyUtils.ParseVector3(goParams.Position);
-            Vector3? rotation = PropertyUtils.ParseVector3(goParams.Rotation);
-            Vector3? scale = PropertyUtils.ParseVector3(goParams.Scale);
+            Vector3? position = null;
+            Vector3? rotation = null;
+            Vector3? scale = null;
+
+            // Handle position - check for both array and object formats
+            if (goParams.Position != null)
+            {
+                position = PropertyUtils.ParseVector3(goParams.Position);
+            }
+            else if (@params["position"] is JObject posObj)
+            {
+                position = PropertyUtils.ParseVector3(posObj);
+            }
+
+            // Handle rotation - check for both array and object formats
+            if (goParams.Rotation != null)
+            {
+                rotation = PropertyUtils.ParseVector3(goParams.Rotation);
+            }
+            else if (@params["rotation"] is JObject rotObj)
+            {
+                rotation = PropertyUtils.ParseVector3(rotObj);
+            }
+
+            // Handle scale - check for both array and object formats
+            if (goParams.Scale != null)
+            {
+                scale = PropertyUtils.ParseVector3(goParams.Scale);
+            }
+            else if (@params["scale"] is JObject scaleObj)
+            {
+                scale = PropertyUtils.ParseVector3(scaleObj);
+            }
 
             if (position.HasValue)
             {

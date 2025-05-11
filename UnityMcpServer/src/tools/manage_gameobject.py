@@ -161,20 +161,32 @@ class GameObjectTool(BaseTool):
             if "component_properties" in params and params.get("component_properties"):
                 if not isinstance(params["component_properties"], dict):
                     raise ParameterValidationError(
-                        "component_properties must be a dictionary mapping component types to property dictionaries"
+                        "component_properties must be a dictionary"
                     )
                 
-                # Check each component's properties
-                for component_type, properties in params["component_properties"].items():
+                # Support two formats:
+                # 1. With component_name: Flat properties structure for single component
+                # 2. Without component_name: Nested structure for multiple components
+                if "component_name" in params and params["component_name"]:
+                    # With component_name, expect flat properties for the specified component
+                    component_type = params["component_name"]
                     try:
                         validate_component_type(component_type)
                     except Exception as e:
-                        raise ParameterValidationError(f"Invalid component type in properties: {component_type} - {str(e)}")
-                    
-                    if not isinstance(properties, dict):
-                        raise ParameterValidationError(
-                            f"Properties for component '{component_type}' must be a dictionary"
-                        )
+                        raise ParameterValidationError(f"Invalid component type: {component_type} - {str(e)}")
+                else:
+                    # Without component_name, we need nested structure for multiple components
+                    # Check each component's properties
+                    for component_type, properties in params["component_properties"].items():
+                        try:
+                            validate_component_type(component_type)
+                        except Exception as e:
+                            raise ParameterValidationError(f"Invalid component type in properties: {component_type} - {str(e)}")
+                        
+                        if not isinstance(properties, dict):
+                            raise ParameterValidationError(
+                                f"Properties for component '{component_type}' must be a dictionary"
+                            )
             
             # Validate primitive type
             if "primitive_type" in params and params.get("primitive_type"):

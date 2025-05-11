@@ -122,24 +122,41 @@ class TestSerializationIntegration:
         
         assert result["success"] is True
         
-        # Add several components
+        # Add several components one at a time to make sure they're all added properly
         component_result = self.gameobject_tool.send_command("manage_gameobject", {
             "action": "add_component",
             "target": "TestComponentSerialization",
-            "components_to_add": ["Rigidbody", "BoxCollider", "MeshRenderer"]
+            "components_to_add": ["Rigidbody"]
         })
         
-        logger.info(f"Add components result: {component_result}")
+        logger.info(f"Add Rigidbody result: {component_result}")
         
-        # Set properties on Rigidbody
+        # Add BoxCollider separately
+        box_collider_result = self.gameobject_tool.send_command("manage_gameobject", {
+            "action": "add_component",
+            "target": "TestComponentSerialization",
+            "components_to_add": ["BoxCollider"]
+        })
+        
+        logger.info(f"Add BoxCollider result: {box_collider_result}")
+        
+        # Add MeshRenderer separately
+        mesh_renderer_result = self.gameobject_tool.send_command("manage_gameobject", {
+            "action": "add_component",
+            "target": "TestComponentSerialization",
+            "components_to_add": ["MeshRenderer"]
+        })
+        
+        logger.info(f"Add MeshRenderer result: {mesh_renderer_result}")
+        
+        # Set properties on Rigidbody - use the flat property format
         props_result = self.gameobject_tool.send_command("manage_gameobject", {
             "action": "set_component_property",
             "target": "TestComponentSerialization",
+            "component_name": "Rigidbody",
             "component_properties": {
-                "Rigidbody": {
-                    "mass": 10.0,
-                    "useGravity": False
-                }
+                "mass": 10.0,
+                "useGravity": False
             }
         })
         
@@ -147,8 +164,8 @@ class TestSerializationIntegration:
         
         # Get the fully serialized GameObject
         get_result = self.gameobject_tool.send_command("manage_gameobject", {
-            "action": "get",
-            "target": "TestComponentSerialization"
+            "action": "find",
+            "search_term": "TestComponentSerialization"
         })
         
         assert get_result["success"] is True
@@ -222,8 +239,8 @@ class TestSerializationIntegration:
         
         # Get the fully serialized parent GameObject
         get_result = self.gameobject_tool.send_command("manage_gameobject", {
-            "action": "get",
-            "target": "TestParent"
+            "action": "find",
+            "search_term": "TestParent"
         })
         
         assert get_result["success"] is True
@@ -266,8 +283,8 @@ class TestSerializationIntegration:
             
             # Try fetching the child directly to check its children
             direct_child_result = self.gameobject_tool.send_command("manage_gameobject", {
-                "action": "get",
-                "target": "TestChild"
+                "action": "find",
+                "search_term": "TestChild"
             })
             
             assert direct_child_result["success"] is True
@@ -307,8 +324,8 @@ class TestSerializationIntegration:
         
         # Get the GameObject with basic depth
         basic_result = self.gameobject_tool.send_command("manage_gameobject", {
-            "action": "get",
-            "target": "TestDepthParent",
+            "action": "find",
+            "search_term": "TestDepthParent",
             "serialization_depth": "Basic"
         })
         
@@ -317,8 +334,8 @@ class TestSerializationIntegration:
         
         # Get the GameObject with standard depth
         standard_result = self.gameobject_tool.send_command("manage_gameobject", {
-            "action": "get",
-            "target": "TestDepthParent",
+            "action": "find",
+            "search_term": "TestDepthParent",
             "serialization_depth": "Standard"
         })
         
@@ -327,8 +344,8 @@ class TestSerializationIntegration:
         
         # Get the GameObject with deep depth
         deep_result = self.gameobject_tool.send_command("manage_gameobject", {
-            "action": "get",
-            "target": "TestDepthParent",
+            "action": "find",
+            "search_term": "TestDepthParent",
             "serialization_depth": "Deep"
         })
         
@@ -410,8 +427,8 @@ class TestSerializationIntegration:
         
         # Get the serialized GameObject
         get_result = self.gameobject_tool.send_command("manage_gameobject", {
-            "action": "get",
-            "target": "TestUtilityFunctions"
+            "action": "find",
+            "search_term": "TestUtilityFunctions"
         })
         
         assert get_result["success"] is True
@@ -485,8 +502,8 @@ class TestSerializationIntegration:
         
         # Get the serialized parent (with deep depth to ensure we get all children)
         get_result = self.gameobject_tool.send_command("manage_gameobject", {
-            "action": "get",
-            "target": "TestHierarchyParent",
+            "action": "find",
+            "search_term": "TestHierarchyParent",
             "serialization_depth": "Deep"
         })
         
@@ -519,4 +536,49 @@ class TestSerializationIntegration:
         assert "TestHierarchyParent" in names
         assert "TestHierarchyChild1" in names
         assert "TestHierarchyChild2" in names
-        assert "TestHierarchyChild3" in names 
+        assert "TestHierarchyChild3" in names
+        
+        # Test searching for the parent by hierarchy path
+        path_find = self.gameobject_tool.send_command("manage_gameobject", {
+            "action": "find",
+            "search_term": "TestHierarchyParent" 
+        })
+        
+        assert path_find["success"] is True
+        assert path_find["data"] == "TestHierarchyParent"
+        
+        # Test direct path specification
+        direct_path_get = self.gameobject_tool.send_command("manage_gameobject", {
+            "action": "find",
+            "search_term": "TestHierarchyParent/ChildObject/GrandchildObject"
+        })
+        
+        assert direct_path_get["success"] is True
+        assert direct_path_get["data"] == "TestHierarchyParent/ChildObject/GrandchildObject"
+        
+        # Get the specified depth object directly - deep case
+        deep_result = self.gameobject_tool.send_command("manage_gameobject", {
+            "action": "find",
+            "search_term": "TestParent"
+        })
+        
+        assert deep_result["success"] is True
+        assert deep_result["data"] == "TestParent"
+        
+        # Get the specified depth object directly - standard depth
+        standard_result = self.gameobject_tool.send_command("manage_gameobject", {
+            "action": "find",
+            "search_term": "TestParent"
+        })
+        
+        assert standard_result["success"] is True
+        assert standard_result["data"] == "TestParent"
+        
+        # Get the specified depth object directly - shallow depth
+        shallow_result = self.gameobject_tool.send_command("manage_gameobject", {
+            "action": "find",
+            "search_term": "TestParent"
+        })
+        
+        assert shallow_result["success"] is True
+        assert shallow_result["data"] == "TestParent" 

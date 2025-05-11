@@ -801,7 +801,7 @@ namespace UnityMcpBridge.Editor.Tools
                 );
             }
 
-            EditorUtility.SetDirty(targetGo); // Mark scene as dirty
+            EditorUtility.SetDirty(targetGo);
             return Response.Success(
                 $"GameObject '{targetGo.name}' modified successfully.",
                 GetGameObjectData(targetGo)
@@ -848,6 +848,12 @@ namespace UnityMcpBridge.Editor.Tools
             }
         }
 
+        private static void FindAllGameObjects()
+        {
+            var allObjects = GetAllSceneObjects(false);
+            allObjects.ToList().ForEach(go => Debug.Log($"[MCP-DEBUG] FindAllGameObjects: Found GameObject: {go.name}"));
+        }
+
         private static object FindGameObjects(
             JObject @params,
             JToken targetToken,
@@ -858,6 +864,17 @@ namespace UnityMcpBridge.Editor.Tools
             bool searchInactive = @params["search_inactive"]?.ToObject<bool>() ?? false;
             bool searchInChildren = @params["search_in_children"]?.ToObject<bool>() ?? false;
             string searchTerm = @params["search_term"]?.ToString();
+
+            // Basic validation for empty search term when required
+            bool searchTermEmpty = string.IsNullOrEmpty(searchTerm) && string.IsNullOrEmpty(targetToken?.ToString());
+            bool isIdSearch = targetToken?.Type == JTokenType.Integer || 
+                             (searchMethod == "by_id" && int.TryParse(targetToken?.ToString(), out _));
+                              
+            // Check if we need a search term
+            if (searchTermEmpty && !isIdSearch && !findAll)
+            {
+                return Response.Error("Search term is required when find_all is false and not searching by ID.");
+            }
 
             JObject findParams = new JObject
             {
@@ -873,14 +890,66 @@ namespace UnityMcpBridge.Editor.Tools
                 findParams
             );
 
+            // Handle empty results with better error messages
+            if (results.Count == 0)
+            {
+                string errorMessage;
+                if (searchTermEmpty)
+                {
+                    errorMessage = findAll 
+                        ? "No game objects found in the scene." 
+                        : "Search term is required for non-ID searches when find_all is false.";
+                }
+                else
+                {
+                    errorMessage = $"No game objects found with search method '{searchMethod}' and term '{(searchTerm ?? targetToken?.ToString())}'.";
+                }
+                return Response.Error(errorMessage);
+            }
+
             // Use SerializationUtilities instead of manually serializing each GameObject
             var serializedResults = SerializationUtilities.SerializeUnityObjects(results, "manage_gameobject");
-            
-            return SerializationUtilities.SerializeResponse(
+            var response = SerializationUtilities.SerializeResponse(
                 "manage_gameobject",
                 $"Found {results.Count} game objects.",
                 new { gameObjects = serializedResults }
             );
+            return response;
+        }
+
+        private static GameObject FindObjectInternal(
+            JToken targetToken,
+            string searchMethod,
+            JObject findParams = null
+        )
+        {
+            // Validate inputs before proceeding
+            if (targetToken == null && (findParams == null || findParams["searchTerm"] == null))
+            {
+                Debug.LogWarning("[ManageGameObject.Find] Both targetToken and searchTerm are null or empty.");
+                return null;
+            }
+            
+            // If find_all is not explicitly false, we still want only one for most single-target operations.
+            bool findAll = findParams?["findAll"]?.ToObject<bool>() ?? false;
+            
+            // If a specific target ID is given, always find just that one.
+            if (
+                targetToken?.Type == JTokenType.Integer
+                || (searchMethod == "by_id" && int.TryParse(targetToken?.ToString(), out _))
+            )
+            {
+                findAll = false;
+            }
+            
+            List<GameObject> results = FindObjectsInternal(
+                targetToken,
+                searchMethod,
+                findAll,
+                findParams
+            );
+            
+            return results.Count > 0 ? results[0] : null;
         }
 
         private static object GetComponentsFromTarget(string target, string searchMethod)
@@ -1053,36 +1122,6 @@ namespace UnityMcpBridge.Editor.Tools
             );
         }
 
-        // --- Internal Helpers ---
-
-        /// <summary>
-        /// Finds a single GameObject based on token (ID, name, path) and search method.
-        /// </summary>
-        private static GameObject FindObjectInternal(
-            JToken targetToken,
-            string searchMethod,
-            JObject findParams = null
-        )
-        {
-            // If find_all is not explicitly false, we still want only one for most single-target operations.
-            bool findAll = findParams?["findAll"]?.ToObject<bool>() ?? false;
-            // If a specific target ID is given, always find just that one.
-            if (
-                targetToken?.Type == JTokenType.Integer
-                || (searchMethod == "by_id" && int.TryParse(targetToken?.ToString(), out _))
-            )
-            {
-                findAll = false;
-            }
-            List<GameObject> results = FindObjectsInternal(
-                targetToken,
-                searchMethod,
-                findAll,
-                findParams
-            );
-            return results.Count > 0 ? results[0] : null;
-        }
-
         /// <summary>
         /// Core logic for finding GameObjects based on various criteria.
         /// </summary>
@@ -1107,6 +1146,28 @@ namespace UnityMcpBridge.Editor.Tools
                     searchMethod = "by_path";
                 else
                     searchMethod = "by_name"; // Default fallback
+            }
+
+            // Validate search term based on search method
+            bool requiresSearchTerm = searchMethod != "by_id_or_name_or_path" &&
+                                    !int.TryParse(searchTerm, out _); // ID can be parsed directly
+            
+            // Handle case where search term is required but missing
+            if (requiresSearchTerm && string.IsNullOrEmpty(searchTerm))
+            {
+                // Special case: if findAll is true and no search term is provided,
+                // default to returning all objects in the scene
+                if (findAll)
+                {
+                    Debug.Log($"[ManageGameObject.Find] No search term provided with findAll=true, returning all scene objects");
+                    return GetAllSceneObjects(searchInactive).ToList();
+                }
+                else
+                {
+                    // For single-object searches, we still need a search term or ID
+                    Debug.LogWarning($"[ManageGameObject.Find] Search method '{searchMethod}' requires a search term, but none was provided.");
+                    return results; // Return empty list
+                }
             }
 
             GameObject rootSearchObject = null;
@@ -1139,14 +1200,29 @@ namespace UnityMcpBridge.Editor.Tools
                     }
                     break;
                 case "by_name":
+                    // Ensure we have a valid search term for name searches
+                    if (string.IsNullOrEmpty(searchTerm))
+                    {
+                        Debug.LogWarning("[ManageGameObject.Find] Empty search term provided for by_name search.");
+                        break;
+                    }
+                    
                     var searchPoolName = rootSearchObject
                         ? rootSearchObject
                             .GetComponentsInChildren<Transform>(searchInactive)
                             .Select(t => t.gameObject)
                         : GetAllSceneObjects(searchInactive);
+                    
                     results.AddRange(searchPoolName.Where(go => go.name == searchTerm));
                     break;
                 case "by_path":
+                    // Ensure we have a valid path for path searches
+                    if (string.IsNullOrEmpty(searchTerm))
+                    {
+                        Debug.LogWarning("[ManageGameObject.Find] Empty path provided for by_path search.");
+                        break;
+                    }
+                    
                     // Path is relative to scene root or rootSearchObject
                     Transform foundTransform = rootSearchObject
                         ? rootSearchObject.transform.Find(searchTerm)
@@ -1155,6 +1231,13 @@ namespace UnityMcpBridge.Editor.Tools
                         results.Add(foundTransform.gameObject);
                     break;
                 case "by_tag":
+                    // Ensure we have a valid tag for tag searches
+                    if (string.IsNullOrEmpty(searchTerm))
+                    {
+                        Debug.LogWarning("[ManageGameObject.Find] Empty tag provided for by_tag search.");
+                        break;
+                    }
+                    
                     var searchPoolTag = rootSearchObject
                         ? rootSearchObject
                             .GetComponentsInChildren<Transform>(searchInactive)
@@ -1168,6 +1251,13 @@ namespace UnityMcpBridge.Editor.Tools
                             .GetComponentsInChildren<Transform>(searchInactive)
                             .Select(t => t.gameObject)
                         : GetAllSceneObjects(searchInactive);
+                    
+                    if (string.IsNullOrEmpty(searchTerm))
+                    {
+                        Debug.LogWarning("[ManageGameObject.Find] Empty layer name/index provided for by_layer search.");
+                        break;
+                    }
+                    
                     if (int.TryParse(searchTerm, out int layerIndex))
                     {
                         results.AddRange(searchPoolLayer.Where(go => go.layer == layerIndex));
@@ -1177,9 +1267,17 @@ namespace UnityMcpBridge.Editor.Tools
                         int namedLayer = LayerMask.NameToLayer(searchTerm);
                         if (namedLayer != -1)
                             results.AddRange(searchPoolLayer.Where(go => go.layer == namedLayer));
+                        else
+                            Debug.LogWarning($"[ManageGameObject.Find] Layer name '{searchTerm}' not found.");
                     }
                     break;
                 case "by_component":
+                    if (string.IsNullOrEmpty(searchTerm))
+                    {
+                        Debug.LogWarning("[ManageGameObject.Find] Empty component type provided for by_component search.");
+                        break;
+                    }
+                    
                     Type componentType = FindType(searchTerm);
                     if (componentType != null)
                     {
@@ -1209,6 +1307,12 @@ namespace UnityMcpBridge.Editor.Tools
                     }
                     break;
                 case "by_id_or_name_or_path": // Helper method used internally
+                    if (string.IsNullOrEmpty(searchTerm))
+                    {
+                        Debug.LogWarning("[ManageGameObject.Find] Empty search term provided for by_id_or_name_or_path search.");
+                        break;
+                    }
+                    
                     if (int.TryParse(searchTerm, out int id))
                     {
                         var allObjectsId = GetAllSceneObjects(true); // Search inactive for internal lookup
@@ -1236,6 +1340,12 @@ namespace UnityMcpBridge.Editor.Tools
                         $"[ManageGameObject.Find] Unknown search method: {searchMethod}"
                     );
                     break;
+            }
+
+            // Log a message if no results were found
+            if (results.Count == 0)
+            {
+                Debug.LogWarning($"[ManageGameObject.Find] No objects found with search method '{searchMethod}' and term '{searchTerm}'.");
             }
 
             // If only one result is needed, return just the first one found.

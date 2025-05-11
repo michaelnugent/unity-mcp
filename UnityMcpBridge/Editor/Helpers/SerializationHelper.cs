@@ -223,6 +223,7 @@ namespace UnityMcpBridge.Editor.Helpers
                 result.IsCircularReference = true;
                 result.CircularReferencePath = referencePath;
                 result.__serialization_status = "circular_reference";
+                Debug.Log($"[SERIALIZATION] Circular reference detected for {objType.Name} at {referencePath}");
                 return result;
             }
             
@@ -236,9 +237,14 @@ namespace UnityMcpBridge.Editor.Helpers
                 ISerializationHandler handler = SerializationHandlerRegistry.GetHandler(objType);
                 if (handler != null)
                 {
+                    Debug.Log($"[SERIALIZATION] Using handler {handler.GetType().Name} for type {objType.FullName}");
                     try
                     {
                         Dictionary<string, object> handlerResult = handler.Serialize(obj, depth);
+                        if (handlerResult == null)
+                        {
+                            Debug.LogWarning($"[SERIALIZATION] Handler {handler.GetType().Name} returned null for {objType.FullName}");
+                        }
                         result.IntrospectedProperties = handlerResult;
                         result.WasFullySerialized = true;
                         handlerUsed = true;
@@ -252,7 +258,7 @@ namespace UnityMcpBridge.Editor.Helpers
                     }
                     catch (Exception handlerEx)
                     {
-                        Debug.LogWarning($"Serialization handler for {objType.Name} failed: {handlerEx.Message}");
+                        Debug.LogWarning($"[SERIALIZATION] Serialization handler for {objType.Name} failed: {handlerEx.Message}");
                         // Fall back to standard serialization if handler fails
                         handlerUsed = false;
                         result.__serialization_error = $"Handler error: {handlerEx.Message}";
@@ -262,6 +268,7 @@ namespace UnityMcpBridge.Editor.Helpers
                 // If no handler or handler failed, try direct serialization for simple types
                 if (!handlerUsed && IsDirectlySerializable(obj))
                 {
+                    Debug.Log($"[SERIALIZATION] Directly serializing {objType.FullName}");
                     result.Data = obj;
                     result.WasFullySerialized = true;
                     result.__serialization_status = "success_direct";
@@ -271,6 +278,7 @@ namespace UnityMcpBridge.Editor.Helpers
                 // If we get here and haven't used a handler, use reflection as a fallback
                 if (!handlerUsed)
                 {
+                    Debug.Log($"[SERIALIZATION] Using fallback/reflection for {objType.FullName}");
                     // Use reflection to gather properties
                     var properties = CreateFallbackRepresentation(obj, depth);
                     result.IntrospectedProperties = properties;
@@ -289,6 +297,7 @@ namespace UnityMcpBridge.Editor.Helpers
             catch (Exception ex)
             {
                 // Handle any unexpected errors
+                Debug.LogError($"[SERIALIZATION] Exception during serialization of {objType.FullName}: {ex}");
                 result.WasFullySerialized = false;
                 result.ErrorMessage = $"Serialization failed: {ex.Message}";
                 result.__serialization_status = "error";

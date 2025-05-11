@@ -162,7 +162,7 @@ class TestGameObjectToolValidation:
         """Test validation for finding GameObjects."""
         # Valid parameters with correct parameter names
         params = {
-            "search_term": "Camera",  # Using snake_case as required by required_params
+            "searchTerm": "Camera",  # Using camelCase to match required_params
             "searchMethod": "by_name",
             "findAll": True
         }
@@ -170,20 +170,20 @@ class TestGameObjectToolValidation:
         # Should validate without errors
         result = self.tool.validate_and_convert_params("find", params)
         
-        # Test invalid parameters - missing search_term
+        # Test invalid parameters - missing searchTerm
         with pytest.raises(ParameterValidationError) as e:
             self.tool.validate_and_convert_params("find", {
                 "searchMethod": "by_name"
             })
-        assert "search_term" in str(e.value)
+        assert "searchTerm" in str(e.value)
         
         # Test invalid parameters - invalid searchMethod
         with pytest.raises(ParameterValidationError) as e:
             self.tool.validate_and_convert_params("find", {
-                "search_term": "Camera",
+                "searchTerm": "Camera",
                 "searchMethod": "invalid_method"
             })
-        assert "searchMethod" in str(e.value) or "search_method" in str(e.value)
+        assert "searchMethod" in str(e.value)
         assert "invalid_method" in str(e.value)
         assert "Valid methods" in str(e.value)
     

@@ -5,9 +5,9 @@ using Newtonsoft.Json.Linq;
 using UnityEditor;
 using UnityEngine;
 using UnityMcpBridge.Editor.Helpers;
-using UnityMcpBridge.Editor.Tools.ManageGameObject.Models;
+using UnityMcpBridge.Editor.Tools.ManageGameObjectImpl.Models;
 
-namespace UnityMcpBridge.Editor.Tools.ManageGameObject.Implementation
+namespace UnityMcpBridge.Editor.Tools.ManageGameObjectImpl
 {
     /// <summary>
     /// Handles deletion of GameObjects in the scene.
@@ -88,7 +88,7 @@ namespace UnityMcpBridge.Editor.Tools.ManageGameObject.Implementation
                     {
                         ["name"] = targetName,
                         ["path"] = targetPath,
-                        ["parent"] = parentObj != null ? GameObjectSerializer.GetGameObjectData(parentObj) : null
+                        ["parent"] = parentObj != null ? (JToken)GameObjectSerializer.GetGameObjectData(parentObj) : null
                     }
                 }
             );
@@ -163,7 +163,7 @@ namespace UnityMcpBridge.Editor.Tools.ManageGameObject.Implementation
                     {
                         ["name"] = targetName,
                         ["path"] = targetPath,
-                        ["parent"] = parentObj != null ? GameObjectSerializer.GetGameObjectData(parentObj) : null
+                        ["parent"] = parentObj != null ? (JToken)GameObjectSerializer.GetGameObjectData(parentObj) : null
                     });
                 }
                 catch (Exception ex)
@@ -184,8 +184,8 @@ namespace UnityMcpBridge.Editor.Tools.ManageGameObject.Implementation
             {
                 ["deleted_count"] = successCount,
                 ["failed_count"] = failureCount,
-                ["errors"] = new JArray(errors),
-                ["deleted_objects"] = new JArray(deletedObjects)
+                ["errors"] = new JArray(errors.Cast<object>().Select(e => (JToken)e).ToArray()),
+                ["deleted_objects"] = new JArray(deletedObjects.Cast<object>().Select(o => (JToken)o).ToArray())
             };
 
             if (failureCount == 0)

@@ -6,7 +6,7 @@ using UnityEditor;
 using UnityEngine;
 using UnityMcpBridge.Editor.Helpers;
 
-namespace UnityMcpBridge.Editor.Tools.ManageGameObject.Implementation
+namespace UnityMcpBridge.Editor.Tools.ManageGameObjectImpl
 {
     /// <summary>
     /// Utility methods for handling property operations on Unity objects.

@@ -4,7 +4,7 @@ using Newtonsoft.Json.Linq;
 using UnityEditor;
 using UnityEngine;
 using UnityMcpBridge.Editor.Helpers;
-using UnityMcpBridge.Editor.Tools.ManageGameObject.Implementation;
+using UnityMcpBridge.Editor.Tools.ManageGameObjectImpl;
 
 namespace UnityMcpBridge.Editor.Tools
 {
@@ -14,12 +14,12 @@ namespace UnityMcpBridge.Editor.Tools
     /// as well as for managing their components and properties.
     /// </summary>
     [InitializeOnLoad]
-    public static class GameObjectManager
+    public static class ManageGameObject
     {
         // Note: We've kept all the public API surface and registration exactly the same,
         // but refactored the implementation into specialized classes to improve maintainability.
 
-        static GameObjectManager()
+        static ManageGameObject()
         {
             CommandRegistry.RegisterCommand("manage_game_object", HandleCommand);
         }

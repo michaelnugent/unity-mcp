@@ -7,9 +7,9 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityMcpBridge.Editor.Helpers;
 using UnityMcpBridge.Editor.Helpers.Serialization;
-using UnityMcpBridge.Editor.Tools.ManageGameObject.Models;
+using UnityMcpBridge.Editor.Tools.ManageGameObjectImpl.Models;
 
-namespace UnityMcpBridge.Editor.Tools.ManageGameObject.Implementation
+namespace UnityMcpBridge.Editor.Tools.ManageGameObjectImpl
 {
     /// <summary>
     /// Handles searching and locating GameObjects in the Unity scene.

@@ -2,7 +2,7 @@ using UnityEngine;
 using UnityMcpBridge.Editor.Helpers;
 using UnityMcpBridge.Editor.Helpers.Serialization;
 
-namespace UnityMcpBridge.Editor.Tools.ManageGameObject.Implementation
+namespace UnityMcpBridge.Editor.Tools.ManageGameObjectImpl
 {
     /// <summary>
     /// Provides a simplified interface to the GameObject and Component serialization system.

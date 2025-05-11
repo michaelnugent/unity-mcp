@@ -1,11 +1,12 @@
 using System;
+using System.Collections.Generic;
 using Newtonsoft.Json.Linq;
 using UnityEditor;
 using UnityEngine;
 using UnityMcpBridge.Editor.Helpers;
-using UnityMcpBridge.Editor.Tools.ManageGameObject.Models;
+using UnityMcpBridge.Editor.Tools.ManageGameObjectImpl.Models;
 
-namespace UnityMcpBridge.Editor.Tools.ManageGameObject.Implementation
+namespace UnityMcpBridge.Editor.Tools.ManageGameObjectImpl
 {
     /// <summary>
     /// Handles component operations on GameObjects.
@@ -391,6 +392,16 @@ namespace UnityMcpBridge.Editor.Tools.ManageGameObject.Implementation
             }
             EditorUtility.SetDirty(targetComponent);
             return null; // Success (or partial success if warnings were logged)
+        }
+
+        /// <summary>
+        /// Gets a component type by name.
+        /// </summary>
+        /// <param name="typeName">The name of the component type to get.</param>
+        /// <returns>The Type object for the requested component, or null if not found.</returns>
+        internal static Type GetComponentType(string typeName)
+        {
+            return PropertyUtils.FindType(typeName);
         }
     }
 } 

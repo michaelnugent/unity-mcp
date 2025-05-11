@@ -1,7 +1,7 @@
 using Newtonsoft.Json.Linq;
 using UnityEngine;
 
-namespace UnityMcpBridge.Editor.Tools.ManageGameObject.Models
+namespace UnityMcpBridge.Editor.Tools.ManageGameObjectImpl.Models
 {
     /// <summary>
     /// Contains common model classes and structs for GameObject management operations.
@@ -35,6 +35,7 @@ namespace UnityMcpBridge.Editor.Tools.ManageGameObject.Models
     /// </summary>
     internal struct GameObjectParams
     {
+        public JToken TargetToken { get; set; }
         public string Name { get; set; }
         public string Tag { get; set; }
         public string Layer { get; set; }
@@ -42,18 +43,23 @@ namespace UnityMcpBridge.Editor.Tools.ManageGameObject.Models
         public JArray Position { get; set; }
         public JArray Rotation { get; set; }
         public JArray Scale { get; set; }
+        public bool? IsActive { get; set; }
+        public bool? IsStatic { get; set; }
         
         public static GameObjectParams FromJObject(JObject @params)
         {
             return new GameObjectParams
             {
+                TargetToken = @params["target"],
                 Name = @params["name"]?.ToString(),
                 Tag = @params["tag"]?.ToString(),
                 Layer = @params["layer"]?.ToString(),
                 ParentToken = @params["parent"],
                 Position = @params["position"] as JArray,
                 Rotation = @params["rotation"] as JArray,
-                Scale = @params["scale"] as JArray
+                Scale = @params["scale"] as JArray,
+                IsActive = @params["is_active"]?.ToObject<bool?>(),
+                IsStatic = @params["is_static"]?.ToObject<bool?>()
             };
         }
     }
@@ -63,6 +69,7 @@ namespace UnityMcpBridge.Editor.Tools.ManageGameObject.Models
     /// </summary>
     internal struct ComponentParams
     {
+        public JToken ComponentTarget { get; set; }
         public string ComponentName { get; set; }
         public JObject Properties { get; set; }
         public JArray ComponentsToAdd { get; set; }
@@ -73,10 +80,12 @@ namespace UnityMcpBridge.Editor.Tools.ManageGameObject.Models
         {
             return new ComponentParams
             {
+                ComponentTarget = @params["component_target"],
                 ComponentName = @params["component_name"]?.ToString(),
                 ComponentsToAdd = @params["components_to_add"] as JArray,
                 ComponentsToRemove = @params["components_to_remove"] as JArray,
-                ComponentProperties = @params["component_properties"] as JObject
+                ComponentProperties = @params["component_properties"] as JObject,
+                Properties = @params["properties"] as JObject
             };
         }
     }

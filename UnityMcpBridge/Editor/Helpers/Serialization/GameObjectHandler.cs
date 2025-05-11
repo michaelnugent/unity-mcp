@@ -67,7 +67,7 @@ namespace UnityMcpBridge.Editor.Helpers.Serialization
         /// <summary>
         /// Gets the full hierarchy path for a GameObject.
         /// </summary>
-        private string GetHierarchyPath(GameObject gameObject)
+        public string GetHierarchyPath(GameObject gameObject)
         {
             var transform = gameObject.transform;
             string path = gameObject.name;

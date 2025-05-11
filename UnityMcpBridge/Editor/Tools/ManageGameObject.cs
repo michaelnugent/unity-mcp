@@ -9,6 +9,7 @@ using UnityEditorInternal;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityMcpBridge.Editor.Helpers; // For Response class and SerializationUtilities
+using UnityMcpBridge.Editor.Helpers.Serialization; // For SerializationHandlerRegistry
 
 namespace UnityMcpBridge.Editor.Tools
 {
@@ -357,12 +358,22 @@ namespace UnityMcpBridge.Editor.Tools
             Vector3? rotation = ParseVector3(@params["rotation"] as JArray);
             Vector3? scale = ParseVector3(@params["scale"] as JArray);
 
+            // Always set transform values if they're provided
             if (position.HasValue)
+            {
+                Debug.Log($"[MCP-DEBUG] Setting new GameObject position to {position.Value}");
                 newGo.transform.localPosition = position.Value;
+            }
             if (rotation.HasValue)
+            {
+                Debug.Log($"[MCP-DEBUG] Setting new GameObject rotation to {rotation.Value}");
                 newGo.transform.localEulerAngles = rotation.Value;
+            }
             if (scale.HasValue)
+            {
+                Debug.Log($"[MCP-DEBUG] Setting new GameObject scale to {scale.Value}");
                 newGo.transform.localScale = scale.Value;
+            }
 
             // Set Tag (added for create action)
             if (!string.IsNullOrEmpty(tag))
@@ -713,18 +724,22 @@ namespace UnityMcpBridge.Editor.Tools
             Vector3? rotation = ParseVector3(@params["rotation"] as JArray);
             Vector3? scale = ParseVector3(@params["scale"] as JArray);
 
-            if (position.HasValue && targetGo.transform.localPosition != position.Value)
+            // Always set transform values if they're provided, don't do equality check
+            if (position.HasValue)
             {
+                Debug.Log($"[MCP-DEBUG] Setting position from {targetGo.transform.localPosition} to {position.Value}");
                 targetGo.transform.localPosition = position.Value;
                 modified = true;
             }
-            if (rotation.HasValue && targetGo.transform.localEulerAngles != rotation.Value)
+            if (rotation.HasValue)
             {
+                Debug.Log($"[MCP-DEBUG] Setting rotation from {targetGo.transform.localEulerAngles} to {rotation.Value}");
                 targetGo.transform.localEulerAngles = rotation.Value;
                 modified = true;
             }
-            if (scale.HasValue && targetGo.transform.localScale != scale.Value)
+            if (scale.HasValue)
             {
+                Debug.Log($"[MCP-DEBUG] Setting scale from {targetGo.transform.localScale} to {scale.Value}");
                 targetGo.transform.localScale = scale.Value;
                 modified = true;
             }
@@ -922,13 +937,211 @@ namespace UnityMcpBridge.Editor.Tools
 
             // Use SerializationUtilities instead of manually serializing each GameObject
             var serializedResults = SerializationUtilities.SerializeUnityObjects(results, "manage_gameobject");
-            // debug log serializedResults
-            Debug.Log($"[MCP-DEBUG] serializedResults: {serializedResults}");
-            var response = SerializationUtilities.SerializeResponse(
-                "manage_gameobject",
-                $"Found {results.Count} game objects.",
-                new { gameObjects = serializedResults }
-            );
+            
+            // debug log serializedResults in detail
+            Debug.Log($"[MCP-DEBUG] serializedResults count: {serializedResults.Count}");
+            foreach(var item in serializedResults)
+            {
+                Debug.Log($"[MCP-DEBUG] serializedResult item type: {item.GetType()}, ToString: {item}");
+            }
+            
+            // Process each serialization result to add basic properties
+            var processedResults = new List<object>();
+            
+            foreach (var result in serializedResults)
+            {
+                if (result is SerializationResult<object> serializationResult)
+                {
+                    // Create a dictionary with both the serialization data and basic properties
+                    var processedObj = new Dictionary<string, object>();
+                    
+                    // Start with basic properties from the GameObject
+                    int index = processedResults.Count;
+                    if (index < results.Count)
+                    {
+                        GameObject go = results[index];
+                        processedObj["name"] = go.name;
+                        processedObj["active"] = go.activeSelf;
+                        processedObj["tag"] = go.tag;
+                        processedObj["layer"] = go.layer;
+                        processedObj["instanceID"] = go.GetInstanceID();
+                        processedObj["__type"] = typeof(GameObject).FullName;
+                        processedObj["__unity_type"] = typeof(GameObject).FullName;
+                        
+                        // Get transform data using TransformHandler
+                        var transformHandler = new Helpers.Serialization.TransformHandler();
+                        var transformData = transformHandler.Serialize(go.transform, SerializationHelper.SerializationDepth.Standard);
+                        
+                        // Make sure transform data has the correct type fields
+                        if (!transformData.ContainsKey("__type"))
+                            transformData["__type"] = typeof(Transform).FullName;
+                        if (!transformData.ContainsKey("__unity_type"))
+                            transformData["__unity_type"] = typeof(Transform).FullName;
+                        
+                        // Create components list that we will send
+                        var componentsList = new List<Dictionary<string, object>>();
+                        
+                        // Add the transform as the first component
+                        componentsList.Add(transformData);
+                        
+                        // Add other components using SerializationHelper to ensure we use registered handlers
+                        var components = go.GetComponents<Component>();
+                        foreach (var component in components)
+                        {
+                            // Skip null components and Transform (which we already added)
+                            if (component == null || component is Transform)
+                                continue;
+                                
+                            try
+                            {
+                                // Use SerializationHelper to get the right handler
+                                var handler = SerializationHandlerRegistry.GetHandler(component.GetType());
+                                Dictionary<string, object> componentData = null;
+                                
+                                if (handler != null)
+                                {
+                                    componentData = handler.Serialize(component, SerializationHelper.SerializationDepth.Standard);
+                                }
+                                else
+                                {
+                                    // Fallback to using SerializationHelper directly
+                                    var serializedComponent = SerializationHelper.CreateSerializationResult(
+                                        component, SerializationHelper.SerializationDepth.Standard);
+                                    
+                                    if (serializedComponent.IntrospectedProperties != null)
+                                    {
+                                        componentData = serializedComponent.IntrospectedProperties;
+                                    }
+                                }
+                                
+                                if (componentData != null)
+                                {
+                                    // Ensure component has type information
+                                    if (!componentData.ContainsKey("__type"))
+                                        componentData["__type"] = component.GetType().FullName;
+                                    if (!componentData.ContainsKey("__unity_type"))
+                                        componentData["__unity_type"] = component.GetType().FullName;
+                                        
+                                    componentsList.Add(componentData);
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                Debug.LogWarning($"Could not serialize component {component.GetType().Name}: {ex.Message}");
+                            }
+                        }
+                        
+                        // Add the components list to our result
+                        processedObj["components"] = componentsList;
+                        
+                        // Also add transform_data directly for compatibility
+                        if (transformData != null)
+                        {
+                            // Do not manually duplicate transform serialization logic here
+                            // The TransformHandler already properly serializes all transform data
+                            processedObj["transform_data"] = transformData;
+                        }
+                        
+                        // Add a summary of component types for convenience
+                        var componentSummary = new List<string>();
+                        componentSummary.Add("Transform"); // Always have Transform
+                        foreach (var comp in components)
+                        {
+                            if (comp != null && !(comp is Transform))
+                            {
+                                componentSummary.Add(comp.GetType().Name);
+                            }
+                        }
+                        processedObj["components_summary"] = componentSummary;
+                        
+                        // Add hierarchical information
+                        processedObj["children_count"] = go.transform.childCount;
+                        processedObj["full_path"] = GetFullPath(go.transform);
+                        
+                        // Use SerializationHelper to serialize the GameObject for additional properties
+                        var serializedGameObject = SerializationHelper.CreateSerializationResult(
+                            go, SerializationHelper.SerializationDepth.Standard);
+                            
+                        // Copy relevant properties from the serialized GameObject
+                        if (serializedGameObject.IntrospectedProperties != null)
+                        {
+                            foreach (var kvp in serializedGameObject.IntrospectedProperties)
+                            {
+                                // Skip properties we've already handled
+                                if (kvp.Key != "components" && !processedObj.ContainsKey(kvp.Key))
+                                {
+                                    processedObj[kvp.Key] = kvp.Value;
+                                }
+                            }
+                        }
+                    }
+                    
+                    // If we have Data, copy it
+                    if (serializationResult.Data is Dictionary<string, object> serializationData)
+                    {
+                        // Copy all serialization data to the processed object
+                        foreach (var kvp in serializationData)
+                        {
+                            // Skip properties we've already handled
+                            if (!processedObj.ContainsKey(kvp.Key))
+                            {
+                                processedObj[kvp.Key] = kvp.Value;
+                            }
+                        }
+                    }
+                    
+                    // Copy all properties from SerializationResult using reflection
+                    foreach (var prop in typeof(SerializationResult<object>).GetProperties())
+                    {
+                        if (prop.CanRead && prop.Name != "Data") // Skip Data as we already handled it
+                        {
+                            try
+                            {
+                                var value = prop.GetValue(serializationResult);
+                                if (value != null && !processedObj.ContainsKey(prop.Name))
+                                {
+                                    processedObj[prop.Name] = value;
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                // Log but continue if a property can't be accessed
+                                Debug.LogWarning($"Could not get property {prop.Name}: {ex.Message}");
+                            }
+                        }
+                    }
+                    
+                    // Add to processed results
+                    processedResults.Add(processedObj);
+                }
+                else
+                {
+                    // If not a SerializationResult, keep as-is
+                    processedResults.Add(result);
+                }
+            }
+            
+            // If we only have one result and we're not explicitly looking for all, return just that one
+            object dataToReturn;
+            if (processedResults.Count == 1 && !findAll)
+            {
+                dataToReturn = processedResults[0];
+                Debug.Log($"[MCP-DEBUG] Returning single gameObject: {dataToReturn}");
+            }
+            else
+            {
+                dataToReturn = processedResults;
+                Debug.Log($"[MCP-DEBUG] Returning {processedResults.Count} gameObjects");
+            }
+            
+            // Try a different approach to create the response
+            var response = new Dictionary<string, object>
+            {
+                ["success"] = true,
+                ["message"] = $"Found {results.Count} game objects.",
+                ["data"] = dataToReturn
+            };
+            Debug.Log($"[MCP-DEBUG] response with data: {response["data"]}");
             return response;
         }
 
@@ -980,11 +1193,14 @@ namespace UnityMcpBridge.Editor.Tools
             // Use SerializationUtilities instead of manually serializing each component
             var serializedComponents = SerializationUtilities.SerializeUnityObjects(components, "manage_gameobject");
             
-            return SerializationUtilities.SerializeResponse(
-                "manage_gameobject", 
-                $"Found {components.Length} components on {go.name}.",
-                new { components = serializedComponents }
-            );
+            // Use dictionary approach for consistency
+            var response = new Dictionary<string, object>
+            {
+                ["success"] = true,
+                ["message"] = $"Found {components.Length} components on {go.name}.",
+                ["data"] = serializedComponents
+            };
+            return response;
         }
 
         private static object AddComponentToTarget(
@@ -2207,11 +2423,21 @@ namespace UnityMcpBridge.Editor.Tools
             {
                 try
                 {
+                    Debug.Log($"[MCP-DEBUG] ParseVector3 input array: {array}");
                     // Use UnityTypeHelper.ParseVector3 instead of direct parsing
-                    return UnityTypeHelper.ParseVector3(array);
+                    Vector3 result = UnityTypeHelper.ParseVector3(array);
+                    Debug.Log($"[MCP-DEBUG] ParseVector3 result: {result}");
+                    return result;
                 }
-                catch
-                { /* Ignore parsing errors */ }
+                catch (Exception e)
+                {
+                    Debug.LogError($"[MCP-DEBUG] ParseVector3 error: {e.Message}");
+                    /* Ignore parsing errors */ 
+                }
+            }
+            else
+            {
+                Debug.LogWarning("[MCP-DEBUG] ParseVector3 received null array");
             }
             return null;
         }
@@ -2240,6 +2466,14 @@ namespace UnityMcpBridge.Editor.Tools
                 
             // Use the serialization system instead of manual serialization
             return SerializationUtilities.SerializeComponent(c, "manage_gameobject");
+        }
+
+        // Helper method to get full path of a transform
+        private static string GetFullPath(Transform transform)
+        {
+            if (transform.parent == null)
+                return transform.name;
+            return GetFullPath(transform.parent) + "/" + transform.name;
         }
     }
 }

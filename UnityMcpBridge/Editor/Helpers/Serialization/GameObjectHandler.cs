@@ -39,6 +39,7 @@ namespace UnityMcpBridge.Editor.Helpers.Serialization
                 ["instanceID"] = gameObject.GetInstanceID(),
                 ["isStatic"] = gameObject.isStatic,
                 ["__type"] = typeof(GameObject).FullName,
+                ["__unity_type"] = typeof(GameObject).FullName,
                 ["__object_id"] = gameObject.GetInstanceID().ToString(),
                 ["hierarchyPath"] = GetHierarchyPath(gameObject)
             };

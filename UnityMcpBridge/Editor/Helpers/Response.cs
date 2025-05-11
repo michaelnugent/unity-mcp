@@ -86,7 +86,7 @@ namespace UnityMcpBridge.Editor.Helpers
                 // the JSON serializer handle them directly for now
                 
                 // For complex types, use our enhanced serialization
-                return SerializationHelper.CreateSerializationResult(data, depth).Data;
+                return SerializationHelper.CreateSerializationResult(data, depth);
             }
             catch (Exception ex)
             {

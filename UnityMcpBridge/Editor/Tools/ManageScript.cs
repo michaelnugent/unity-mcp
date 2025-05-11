@@ -32,12 +32,12 @@ namespace UnityMcpBridge.Editor.Tools
             string contents = null;
 
             // Check if we have base64 encoded contents
-            bool contentsEncoded = @params["contentsEncoded"]?.ToObject<bool>() ?? false;
-            if (contentsEncoded && @params["encodedContents"] != null)
+            bool contentsEncoded = @params["contents_encoded"]?.ToObject<bool>() ?? false;
+            if (contentsEncoded && @params["encoded_contents"] != null)
             {
                 try
                 {
-                    contents = DecodeBase64(@params["encodedContents"].ToString());
+                    contents = DecodeBase64(@params["encoded_contents"].ToString());
                 }
                 catch (Exception e)
                 {
@@ -49,7 +49,7 @@ namespace UnityMcpBridge.Editor.Tools
                 contents = @params["contents"]?.ToString();
             }
 
-            string scriptType = @params["scriptType"]?.ToString(); // For templates/validation
+            string scriptType = @params["script_type"]?.ToString(); // For templates/validation
             string namespaceName = @params["namespace"]?.ToString(); // For organizing code
 
             // Validate required parameters

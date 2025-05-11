@@ -249,21 +249,21 @@ class SceneTool(BaseTool):
                 "action": action.lower(),
                 "path": path,
                 "name": name,
-                "buildIndex": build_index,
+                "build_index": build_index,
                 "additive": additive,
-                "prefabPath": prefab_path,
-                "gameObjectName": game_object_name,
-                "componentType": component_type,
-                "componentProperties": component_properties,
+                "prefab_path": prefab_path,
+                "game_object_name": game_object_name,
+                "component_type": component_type,
+                "component_properties": component_properties,
                 "position": position,
                 "rotation": rotation,
                 "scale": scale,
-                "parentName": parent_name,
-                "activeState": active_state,
+                "parent_name": parent_name,
+                "active_state": active_state,
                 "query": query,
-                "includeChildren": include_children,
-                "screenshotPath": screenshot_path,
-                "validateOnly": validate_only
+                "include_children": include_children,
+                "screenshot_path": screenshot_path,
+                "validate_only": validate_only
             }
             
             # Remove None values to avoid sending unnecessary nulls

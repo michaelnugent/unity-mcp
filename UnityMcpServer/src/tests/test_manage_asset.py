@@ -40,7 +40,7 @@ def registered_tool(mock_fastmcp, mock_unity_connection):
                 "message": "Asset created successfully",
                 "data": {
                     "path": kwargs.get("path", ""),
-                    "assetType": kwargs.get("asset_type", ""),
+                    "asset_type": kwargs.get("asset_type", ""),
                     "guid": "12345678901234567890123456789012"
                 }
             }
@@ -50,7 +50,7 @@ def registered_tool(mock_fastmcp, mock_unity_connection):
                 "message": "Asset modified successfully",
                 "data": {
                     "path": kwargs.get("path", ""),
-                    "assetType": "Material",
+                    "asset_type": "Material",
                     "modifiedProperties": ["color"]
                 }
             }
@@ -60,7 +60,7 @@ def registered_tool(mock_fastmcp, mock_unity_connection):
                 "message": "Asset deleted successfully",
                 "data": {
                     "path": kwargs.get("path", ""),
-                    "assetType": "Material"
+                    "asset_type": "Material"
                 }
             }
         elif action == "search":
@@ -70,12 +70,12 @@ def registered_tool(mock_fastmcp, mock_unity_connection):
                 "data": [
                     {
                         "path": "Assets/Materials/Red.mat",
-                        "assetType": "Material",
+                        "asset_type": "Material",
                         "guid": "12345678901234567890123456789012"
                     },
                     {
                         "path": "Assets/Materials/Blue.mat",
-                        "assetType": "Material",
+                        "asset_type": "Material",
                         "guid": "23456789012345678901234567890123"
                     }
                 ]
@@ -86,7 +86,7 @@ def registered_tool(mock_fastmcp, mock_unity_connection):
                 "message": "Folder created successfully",
                 "data": {
                     "path": kwargs.get("path", ""),
-                    "assetType": "Folder",
+                    "asset_type": "Folder",
                     "guid": "12345678901234567890123456789012"
                 }
             }
@@ -122,7 +122,7 @@ async def test_asset_tool_create(registered_tool, mock_context, mock_unity_conne
         "message": "Asset created successfully",
         "data": {
             "path": "Assets/Materials/NewMaterial.mat",
-            "assetType": "Material",
+            "asset_type": "Material",
             "guid": "12345678901234567890123456789012"
         }
     }
@@ -140,7 +140,7 @@ async def test_asset_tool_create(registered_tool, mock_context, mock_unity_conne
     assert result["success"] is True
     assert "created" in result.get("message", "").lower()
     assert result["data"]["path"] == "Assets/Materials/NewMaterial.mat"
-    assert result["data"]["assetType"] == "Material"
+    assert result["data"]["asset_type"] == "Material"
     
     # Check correct parameters were sent
     assert_command_called_with(mock_unity_connection, "manage_asset", {
@@ -159,7 +159,7 @@ async def test_asset_tool_modify(registered_tool, mock_context, mock_unity_conne
         "message": "Asset modified successfully",
         "data": {
             "path": "Assets/Materials/ExistingMaterial.mat",
-            "assetType": "Material",
+            "asset_type": "Material",
             "modifiedProperties": ["color"]
         }
     }
@@ -194,7 +194,7 @@ async def test_asset_tool_delete(registered_tool, mock_context, mock_unity_conne
         "message": "Asset deleted successfully",
         "data": {
             "path": "Assets/Materials/OldMaterial.mat",
-            "assetType": "Material"
+            "asset_type": "Material"
         }
     }
     
@@ -226,7 +226,7 @@ async def test_asset_tool_duplicate(registered_tool, mock_context, mock_unity_co
         "data": {
             "originalPath": "Assets/Materials/OriginalMaterial.mat",
             "duplicatePath": "Assets/Materials/CopiedMaterial.mat",
-            "assetType": "Material"
+            "asset_type": "Material"
         }
     }
     
@@ -261,7 +261,7 @@ async def test_asset_tool_move(registered_tool, mock_context, mock_unity_connect
         "data": {
             "originalPath": "Assets/Materials/OldFolder/Material.mat",
             "newPath": "Assets/Materials/NewFolder/Material.mat",
-            "assetType": "Material"
+            "asset_type": "Material"
         }
     }
     
@@ -296,7 +296,7 @@ async def test_asset_tool_rename(registered_tool, mock_context, mock_unity_conne
         "data": {
             "originalPath": "Assets/Materials/OldName.mat",
             "newPath": "Assets/Materials/NewName.mat",
-            "assetType": "Material"
+            "asset_type": "Material"
         }
     }
     
@@ -331,12 +331,12 @@ async def test_asset_tool_search(registered_tool, mock_context, mock_unity_conne
         "data": [
             {
                 "path": "Assets/Materials/Red.mat",
-                "assetType": "Material",
+                "asset_type": "Material",
                 "guid": "12345678901234567890123456789012"
             },
             {
                 "path": "Assets/Materials/Blue.mat",
-                "assetType": "Material",
+                "asset_type": "Material",
                 "guid": "23456789012345678901234567890123"
             }
         ]
@@ -375,7 +375,7 @@ async def test_asset_tool_get_info(registered_tool, mock_context, mock_unity_con
         "message": "Asset information retrieved successfully",
         "data": {
             "path": "Assets/Materials/ExampleMaterial.mat",
-            "assetType": "Material",
+            "asset_type": "Material",
             "guid": "12345678901234567890123456789012",
             "fileSize": 2048,
             "importedTime": "2023-09-15T14:30:00Z",
@@ -401,7 +401,7 @@ async def test_asset_tool_get_info(registered_tool, mock_context, mock_unity_con
     assert result["success"] is True
     assert "information" in result.get("message", "").lower()
     assert result["data"]["path"] == "Assets/Materials/ExampleMaterial.mat"
-    assert result["data"]["assetType"] == "Material"
+    assert result["data"]["asset_type"] == "Material"
     assert len(result["data"]["dependencies"]) == 1
     assert result["data"]["properties"]["shader"] == "Standard"
     
@@ -420,7 +420,7 @@ async def test_asset_tool_create_folder(registered_tool, mock_context, mock_unit
         "message": "Folder created successfully",
         "data": {
             "path": "Assets/NewFolder",
-            "assetType": "Folder",
+            "asset_type": "Folder",
             "guid": "12345678901234567890123456789012"
         }
     }
@@ -436,7 +436,7 @@ async def test_asset_tool_create_folder(registered_tool, mock_context, mock_unit
     assert result["success"] is True
     assert "folder" in result.get("message", "").lower()
     assert result["data"]["path"] == "Assets/NewFolder"
-    assert result["data"]["assetType"] == "Folder"
+    assert result["data"]["asset_type"] == "Folder"
     
     # Check correct parameters were sent
     assert_command_called_with(mock_unity_connection, "manage_asset", {

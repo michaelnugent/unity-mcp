@@ -97,7 +97,7 @@ class TestGameObjectToolValidation:
         # Valid parameters
         params = {
             "target": "Main Camera",
-            "componentsToAdd": ["UnityEngine.BoxCollider", "UnityEngine.Rigidbody"]
+            "components_to_add": ["UnityEngine.BoxCollider", "UnityEngine.Rigidbody"]
         }
         
         # Should validate without errors
@@ -106,23 +106,23 @@ class TestGameObjectToolValidation:
         # Test invalid parameters - missing target
         with pytest.raises(ParameterValidationError) as e:
             self.tool.validate_and_convert_params("add_component", {
-                "componentsToAdd": ["UnityEngine.BoxCollider"]
+                "components_to_add": ["UnityEngine.BoxCollider"]
             })
         assert "target" in str(e.value)
         
-        # Test invalid parameters - missing componentsToAdd
+        # Test invalid parameters - missing components_to_add
         with pytest.raises(ParameterValidationError) as e:
             self.tool.validate_and_convert_params("add_component", {
                 "target": "Main Camera"
             })
-        assert "componentsToAdd" in str(e.value) or "components" in str(e.value)
+        assert "components_to_add" in str(e.value) or "components" in str(e.value)
     
     def test_component_properties_validation(self):
         """Test validation for setting component properties."""
         # Valid parameters
         params = {
             "target": "Main Camera",
-            "componentProperties": {
+            "component_properties": {
                 "Transform": {
                     "position": [1, 2, 3],
                     "rotation": [0, 90, 0]
@@ -137,20 +137,20 @@ class TestGameObjectToolValidation:
         # Should validate without errors
         result = self.tool.validate_and_convert_params("set_component_property", params)
         
-        # Test invalid parameters - componentProperties not a dict
+        # Test invalid parameters - component_properties not a dict
         with pytest.raises(ParameterValidationError) as e:
             self.tool.validate_and_convert_params("set_component_property", {
                 "target": "Main Camera",
-                "componentProperties": "not_a_dict"
+                "component_properties": "not_a_dict"
             })
-        assert "componentProperties" in str(e.value)
+        assert "component_properties" in str(e.value)
         assert "dict" in str(e.value).lower()
         
         # Test invalid parameters - component properties not a dict
         with pytest.raises(ParameterValidationError) as e:
             self.tool.validate_and_convert_params("set_component_property", {
                 "target": "Main Camera",
-                "componentProperties": {
+                "component_properties": {
                     "Transform": "not_a_dict"
                 }
             })
@@ -162,28 +162,28 @@ class TestGameObjectToolValidation:
         """Test validation for finding GameObjects."""
         # Valid parameters with correct parameter names
         params = {
-            "searchTerm": "Camera",  # Using camelCase to match required_params
-            "searchMethod": "by_name",
-            "findAll": True
+            "search_term": "Camera",  # Using snake_case to match required_params
+            "search_method": "by_name",
+            "find_all": True
         }
         
         # Should validate without errors
         result = self.tool.validate_and_convert_params("find", params)
         
-        # Test invalid parameters - missing searchTerm
+        # Test invalid parameters - missing search_term
         with pytest.raises(ParameterValidationError) as e:
             self.tool.validate_and_convert_params("find", {
-                "searchMethod": "by_name"
+                "search_method": "by_name"
             })
-        assert "searchTerm" in str(e.value)
+        assert "search_term" in str(e.value)
         
-        # Test invalid parameters - invalid searchMethod
+        # Test invalid parameters - invalid search_method
         with pytest.raises(ParameterValidationError) as e:
             self.tool.validate_and_convert_params("find", {
-                "searchTerm": "Camera",
-                "searchMethod": "invalid_method"
+                "search_term": "Camera",
+                "search_method": "invalid_method"
             })
-        assert "searchMethod" in str(e.value)
+        assert "search_method" in str(e.value)
         assert "invalid_method" in str(e.value)
         assert "Valid methods" in str(e.value)
     
@@ -191,7 +191,7 @@ class TestGameObjectToolValidation:
         """Test validation for instantiating prefabs."""
         # Valid parameters
         params = {
-            "prefabPath": "Assets/Prefabs/TestPrefab.prefab",
+            "prefab_path": "Assets/Prefabs/TestPrefab.prefab",
             "position": [1, 2, 3],
             "rotation": [0, 90, 0]
         }
@@ -199,19 +199,19 @@ class TestGameObjectToolValidation:
         # Should validate without errors
         result = self.tool.validate_and_convert_params("instantiate", params)
         
-        # Test invalid parameters - missing prefabPath
+        # Test invalid parameters - missing prefab_path
         with pytest.raises(ParameterValidationError) as e:
             self.tool.validate_and_convert_params("instantiate", {
                 "position": [1, 2, 3]
             })
-        assert "prefabPath" in str(e.value)
+        assert "prefab_path" in str(e.value)
         
         # Test invalid parameters - invalid prefab path
         with pytest.raises(ParameterValidationError) as e:
             self.tool.validate_and_convert_params("instantiate", {
-                "prefabPath": "InvalidPath/TestPrefab.prefab"
+                "prefab_path": "InvalidPath/TestPrefab.prefab"
             })
-        assert "prefabPath" in str(e.value) or "prefab path" in str(e.value)
+        assert "prefab_path" in str(e.value) or "prefab path" in str(e.value)
         assert "Asset" in str(e.value)
     
     def test_primitive_type_validation(self):
@@ -219,20 +219,20 @@ class TestGameObjectToolValidation:
         # Valid parameters
         params = {
             "name": "TestCube",
-            "primitiveType": "Cube",
+            "primitive_type": "Cube",
             "position": [1, 2, 3]
         }
         
         # Should validate without errors
         result = self.tool.validate_and_convert_params("create", params)
         
-        # Test invalid parameters - invalid primitiveType
+        # Test invalid parameters - invalid primitive_type
         with pytest.raises(ParameterValidationError) as e:
             self.tool.validate_and_convert_params("create", {
                 "name": "TestShape",
-                "primitiveType": "InvalidShape"
+                "primitive_type": "InvalidShape"
             })
-        assert "primitiveType" in str(e.value) or "primitive" in str(e.value).lower()
+        assert "primitive_type" in str(e.value) or "primitive" in str(e.value).lower()
         assert "InvalidShape" in str(e.value)
         assert "Valid types" in str(e.value)
     
@@ -245,8 +245,8 @@ class TestGameObjectToolValidation:
         }
         params = {
             "action": "find",
-            "searchTerm": "Camera",
-            "searchMethod": "by_name"
+            "search_term": "Camera",
+            "search_method": "by_name"
         }
         
         # Process the response

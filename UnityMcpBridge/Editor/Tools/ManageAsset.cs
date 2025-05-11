@@ -82,7 +82,7 @@ namespace UnityMcpBridge.Editor.Tools
                     case "get_info":
                         return GetAssetInfo(
                             path,
-                            @params["generatePreview"]?.ToObject<bool>() ?? false
+                            @params["generate_preview"]?.ToObject<bool>() ?? false
                         );
                     case "create_folder": // Added specific action for clarity
                         return CreateFolder(path);
@@ -143,13 +143,13 @@ namespace UnityMcpBridge.Editor.Tools
         private static object CreateAsset(JObject @params)
         {
             string path = @params["path"]?.ToString();
-            string assetType = @params["assetType"]?.ToString();
+            string assetType = @params["asset_type"]?.ToString() ?? @params["assetType"]?.ToString();
             JObject properties = @params["properties"] as JObject;
 
             if (string.IsNullOrEmpty(path))
                 return Response.Error("'path' is required for create_asset.");
             if (string.IsNullOrEmpty(assetType))
-                return Response.Error("'assetType' is required for create_asset.");
+                return Response.Error("'asset_type' is required for create_asset.");
 
             string fullPath = SanitizeAssetPath(path);
             string directory = Path.GetDirectoryName(fullPath);
@@ -592,13 +592,13 @@ namespace UnityMcpBridge.Editor.Tools
 
         private static object SearchAssets(JObject @params)
         {
-            string searchPattern = @params["searchPattern"]?.ToString();
-            string filterType = @params["filterType"]?.ToString();
+            string searchPattern = @params["search_pattern"]?.ToString();
+            string filterType = @params["filter_type"]?.ToString();
             string pathScope = @params["path"]?.ToString(); // Use path as folder scope
-            string filterDateAfterStr = @params["filterDateAfter"]?.ToString();
-            int pageSize = @params["pageSize"]?.ToObject<int?>() ?? 50; // Default page size
-            int pageNumber = @params["pageNumber"]?.ToObject<int?>() ?? 1; // Default page number (1-based)
-            bool generatePreview = @params["generatePreview"]?.ToObject<bool>() ?? false;
+            string filterDateAfterStr = @params["filter_date_after"]?.ToString();
+            int pageSize = @params["page_size"]?.ToObject<int?>() ?? 50; // Default page size
+            int pageNumber = @params["page_number"]?.ToObject<int?>() ?? 1; // Default page number (1-based)
+            bool generatePreview = @params["generate_preview"]?.ToObject<bool>() ?? false;
 
             List<string> searchFilters = new List<string>();
             if (!string.IsNullOrEmpty(searchPattern))

@@ -65,8 +65,8 @@ class TestEditorOperations:
         """Test that string parameters are accepted correctly.
         
         This test validates that string parameters are properly accepted
-        and don't cause validation errors, while handling the parameter naming 
-        inconsistency between Python (tool_name) and Unity (toolName).
+        and don't cause validation errors, using consistent snake_case naming 
+        for all parameters.
         
         Args:
             unity_conn: The Unity connection fixture
@@ -77,12 +77,10 @@ class TestEditorOperations:
         # Try to set the active tool using a string parameter
         tool_name = "Move"  # Use a simple Unity tool name
         
-        # Include both parameter names to work around inconsistency
-        # Python validation expects tool_name but Unity might expect toolName
+        # Send the parameter in snake_case format
         result = self.editor_tool.send_command("manage_editor", {
             "action": "set_active_tool",
-            "tool_name": tool_name,  # For Python validation
-            "toolName": tool_name    # For Unity backend
+            "tool_name": tool_name  # Using snake_case naming convention
         })
         
         # Log the complete response

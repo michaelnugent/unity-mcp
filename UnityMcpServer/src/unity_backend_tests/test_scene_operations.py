@@ -241,7 +241,7 @@ class TestSceneOperations:
         if "data" in result:
             if isinstance(result["data"], dict):
                 # Some of these fields should be present
-                expected_fields = ["name", "path", "buildIndex", "isDirty"]
+                expected_fields = ["name", "path", "build_index", "is_dirty"]
                 
                 # At least one of the expected fields should be present
                 found_fields = [field for field in expected_fields if field in result["data"]]

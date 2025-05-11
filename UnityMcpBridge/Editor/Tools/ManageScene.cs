@@ -54,25 +54,25 @@ namespace UnityMcpBridge.Editor.Tools
                 // Extract common parameters
                 string path = @params["path"]?.ToString();
                 string name = @params["name"]?.ToString();
-                int? buildIndex = @params["buildIndex"]?.ToObject<int>();
+                int? buildIndex = @params["build_index"]?.ToObject<int>();
                 bool? additive = @params["additive"]?.ToObject<bool>();
-                string prefabPath = @params["prefabPath"]?.ToString();
-                string gameObjectName = @params["gameObjectName"]?.ToString();
-                string componentType = @params["componentType"]?.ToString();
-                JObject componentProperties = @params["componentProperties"] as JObject;
+                string prefabPath = @params["prefab_path"]?.ToString();
+                string gameObjectName = @params["game_object_name"]?.ToString();
+                string componentType = @params["component_type"]?.ToString();
+                JObject componentProperties = @params["component_properties"] as JObject;
                 JArray positionArray = @params["position"] as JArray;
                 JArray rotationArray = @params["rotation"] as JArray;
                 JArray scaleArray = @params["scale"] as JArray;
-                string parentName = @params["parentName"]?.ToString();
-                bool? activeState = @params["activeState"]?.ToObject<bool>();
+                string parentName = @params["parent_name"]?.ToString();
+                bool? activeState = @params["active_state"]?.ToObject<bool>();
                 string query = @params["query"]?.ToString();
-                bool? includeChildren = @params["includeChildren"]?.ToObject<bool>();
-                string screenshotPath = @params["screenshotPath"]?.ToString();
+                bool? includeChildren = @params["include_children"]?.ToObject<bool>();
+                string screenshotPath = @params["screenshot_path"]?.ToString();
 
                 // For backward compatibility
-                string scenePath = @params["scenePath"]?.ToString() ?? path;
-                string sceneName = @params["sceneName"]?.ToString() ?? name;
-                bool? saveCurrent = @params["saveCurrent"]?.ToObject<bool>();
+                string scenePath = @params["scene_path"]?.ToString() ?? path;
+                string sceneName = @params["scene_name"]?.ToString() ?? name;
+                bool? saveCurrent = @params["save_current"]?.ToObject<bool>();
 
                 // Route to specific action handlers
                 switch (action)

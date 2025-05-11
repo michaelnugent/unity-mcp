@@ -92,7 +92,6 @@ class TestPrefabOperations:
                 find_instantiated_result = gameobject_tool.send_command("manage_gameobject", {
                     "action": "find",
                     "search_term": search_name,
-                    "searchTerm": search_name,
                 })
                 logger.info(f"Find instantiated prefab response for '{search_name}': {find_instantiated_result}")
                 if find_instantiated_result.get("success") and find_instantiated_result.get("data"):
@@ -149,27 +148,23 @@ class TestPrefabOperations:
             add_component_result = self.gameobject_tool.send_command("manage_gameobject", {
                 "action": "add_component",
                 "target": self.test_gameobject_name,
-                "componentsToAdd": ["UnityEngine.BoxCollider"]
+                "components_to_add": ["UnityEngine.BoxCollider"]
             })
             
             logger.info(f"Add component response: {add_component_result}")
             assert add_component_result["success"] is True, f"Failed to add component: {add_component_result.get('error', '')}"
             
-            # Try with camelCase parameters
-            camel_case_params = {
+            # Use snake_case parameters
+            snake_case_params = {
                 "action": "create",
-                "gameObjectPath": self.test_gameobject_name,
-                "destinationPath": self.test_prefab_path,
-                # Include both camelCase and snake_case versions to handle either case
                 "game_object_path": self.test_gameobject_name,
                 "destination_path": self.test_prefab_path
             }
-            logger.info(f"Trying with combined camelCase/snake_case parameters: {camel_case_params}")
+            logger.info(f"Trying with snake_case parameters: {snake_case_params}")
             
             # Debug: modify the parameters to match what we think is expected
-            # Try using combined camelCase/snake_case parameters
-            logger.info("Attempting to create prefab with combined parameters...")
-            create_prefab_result = self.prefab_tool.send_command("manage_prefabs", camel_case_params)
+            logger.info("Attempting to create prefab...")
+            create_prefab_result = self.prefab_tool.send_command("manage_prefabs", snake_case_params)
             logger.info(f"Create prefab response: {create_prefab_result}")
             
             assert create_prefab_result["success"] is True, f"Failed to create prefab: {create_prefab_result.get('error', '')}"
@@ -201,7 +196,6 @@ class TestPrefabOperations:
         find_result = self.gameobject_tool.send_command("manage_gameobject", {
             "action": "find",
             "search_term": name,
-            #"searchTerm": name,
         })
         logger.info(f"Find GameObject response: {find_result}")
         assert find_result["success"] is True, f"Failed to find GameObject: {find_result.get('error', '')}"
@@ -242,11 +236,9 @@ class TestPrefabOperations:
             logger.info(f"Create GameObject response: {create_go_result}")
             assert create_go_result["success"] is True, f"Failed to create GameObject: {create_go_result.get('error', '')}"
             
-            # Create a prefab from the GameObject using both parameter formats
+            # Create a prefab from the GameObject using snake_case parameters
             create_prefab_result = self.prefab_tool.send_command("manage_prefabs", {
                 "action": "create",
-                "gameObjectPath": self.test_gameobject_name,
-                "destinationPath": self.test_prefab_path,
                 "game_object_path": self.test_gameobject_name,
                 "destination_path": self.test_prefab_path
             })
@@ -263,10 +255,9 @@ class TestPrefabOperations:
             logger.info(f"Delete GameObject response: {delete_go_result}")
             assert delete_go_result["success"] is True, f"Failed to delete original GameObject: {delete_go_result.get('error', '')}"
             
-            # Instantiate the prefab using both parameter formats
+            # Instantiate the prefab using snake_case parameters
             instantiate_result = self.prefab_tool.send_command("manage_prefabs", {
                 "action": "instantiate",
-                "prefabPath": self.test_prefab_path,
                 "prefab_path": self.test_prefab_path
             })
             
@@ -306,7 +297,6 @@ class TestPrefabOperations:
             # List the overrides on the prefab instance using both parameter formats
             overrides_result = self.prefab_tool.send_command("manage_prefabs", {
                 "action": "list_overrides",
-                "gameObjectPath": instantiated_name,
                 "game_object_path": instantiated_name
             })
             
@@ -371,17 +361,15 @@ class TestPrefabOperations:
             add_component_result = self.gameobject_tool.send_command("manage_gameobject", {
                 "action": "add_component",
                 "target": self.test_gameobject_name,
-                "componentsToAdd": ["UnityEngine.BoxCollider"]
+                "components_to_add": ["UnityEngine.BoxCollider"]
             })
             
             logger.info(f"Add component response: {add_component_result}")
             assert add_component_result["success"] is True, f"Failed to add component: {add_component_result.get('error', '')}"
             
-            # Create a prefab from the GameObject using both parameter formats
+            # Create a prefab from the GameObject using snake_case parameters
             create_prefab_result = self.prefab_tool.send_command("manage_prefabs", {
                 "action": "create",
-                "gameObjectPath": self.test_gameobject_name,
-                "destinationPath": self.test_prefab_path,
                 "game_object_path": self.test_gameobject_name,
                 "destination_path": self.test_prefab_path
             })
@@ -389,11 +377,9 @@ class TestPrefabOperations:
             logger.info(f"Create prefab response: {create_prefab_result}")
             assert create_prefab_result["success"] is True, f"Failed to create prefab: {create_prefab_result.get('error', '')}"
             
-            # Create a prefab variant from the original prefab using both parameter formats
+            # Create a prefab variant from the original prefab using snake_case parameters
             create_variant_result = self.prefab_tool.send_command("manage_prefabs", {
                 "action": "create_variant",
-                "prefabPath": self.test_prefab_path,
-                "destinationPath": variant_path,
                 "prefab_path": self.test_prefab_path,
                 "destination_path": variant_path
             })
@@ -459,11 +445,9 @@ class TestPrefabOperations:
             logger.info(f"Create GameObject response: {create_go_result}")
             assert create_go_result["success"] is True, f"Failed to create GameObject: {create_go_result.get('error', '')}"
             
-            # Create a prefab from the GameObject using both parameter formats
+            # Create a prefab from the GameObject using snake_case parameters
             create_prefab_result = self.prefab_tool.send_command("manage_prefabs", {
                 "action": "create",
-                "gameObjectPath": self.test_gameobject_name,
-                "destinationPath": self.test_prefab_path,
                 "game_object_path": self.test_gameobject_name,
                 "destination_path": self.test_prefab_path
             })
@@ -480,10 +464,9 @@ class TestPrefabOperations:
             logger.info(f"Delete GameObject response: {delete_go_result}")
             assert delete_go_result["success"] is True, f"Failed to delete original GameObject: {delete_go_result.get('error', '')}"
             
-            # Instantiate the prefab using both parameter formats
+            # Instantiate the prefab using snake_case parameters
             instantiate_result = self.prefab_tool.send_command("manage_prefabs", {
                 "action": "instantiate",
-                "prefabPath": self.test_prefab_path,
                 "prefab_path": self.test_prefab_path
             })
             
@@ -520,10 +503,9 @@ class TestPrefabOperations:
             logger.info(f"Modify position response: {modify_result}")
             assert modify_result["success"] is True, f"Failed to modify position: {modify_result.get('error', '')}"
             
-            # List the overrides on the prefab instance using both parameter formats
+            # List the overrides on the prefab instance using snake_case parameters
             overrides_result = self.prefab_tool.send_command("manage_prefabs", {
                 "action": "list_overrides",
-                "gameObjectPath": instantiated_name,
                 "game_object_path": instantiated_name
             })
             
@@ -566,18 +548,10 @@ class TestPrefabOperations:
                 # Missing game_object_path
             })
             assert create_result["success"] is False, "Should fail with missing game_object_path"
-            assert (
-                "game_object_path" in create_result.get("error", "") or
-                "gameObjectPath" in create_result.get("error", "") or
-                "game_object_path" in create_result.get("message", "").lower() or
-                "gameObjectPath" in create_result.get("message", "").lower()
-            )
+            assert "game_object_path" in create_result.get("error", "").lower() or "game_object_path" in create_result.get("message", "").lower()
         except ParameterValidationError as e:
-            error_message = str(e)
-            assert (
-                "game_object_path" in error_message or
-                "gameObjectPath" in error_message
-            ), f"Error message did not mention missing game_object_path: {error_message}"
+            error_message = str(e).lower()
+            assert "game_object_path" in error_message, f"Error message did not mention missing game_object_path: {error_message}"
         
         # Test missing parameters for instantiate
         try:
@@ -586,18 +560,10 @@ class TestPrefabOperations:
                 # Missing prefab_path
             })
             assert instantiate_result["success"] is False, "Should fail with missing prefab_path"
-            assert (
-                "prefab_path" in instantiate_result.get("error", "") or
-                "prefabPath" in instantiate_result.get("error", "") or
-                "prefab_path" in instantiate_result.get("message", "").lower() or
-                "prefabPath" in instantiate_result.get("message", "").lower()
-            )
+            assert "prefab_path" in instantiate_result.get("error", "").lower() or "prefab_path" in instantiate_result.get("message", "").lower()
         except ParameterValidationError as e:
-            error_message = str(e)
-            assert (
-                "prefab_path" in error_message or
-                "prefabPath" in error_message
-            ), f"Error message did not mention missing prefab_path: {error_message}"
+            error_message = str(e).lower()
+            assert "prefab_path" in error_message, f"Error message did not mention missing prefab_path: {error_message}"
         
         # Test missing parameters for add_component
         try:
@@ -607,15 +573,7 @@ class TestPrefabOperations:
                 # Missing component_type
             })
             assert add_component_result["success"] is False, "Should fail with missing component_type"
-            assert (
-                "component_type" in add_component_result.get("error", "") or
-                "componentType" in add_component_result.get("error", "") or
-                "component_type" in add_component_result.get("message", "").lower() or
-                "componentType" in add_component_result.get("message", "").lower()
-            )
+            assert "component_type" in add_component_result.get("error", "").lower() or "component_type" in add_component_result.get("message", "").lower()
         except ParameterValidationError as e:
-            error_message = str(e)
-            assert (
-                "component_type" in error_message or
-                "componentType" in error_message
-            ), f"Error message did not mention missing component_type: {error_message}" 
+            error_message = str(e).lower()
+            assert "component_type" in error_message, f"Error message did not mention missing component_type: {error_message}" 

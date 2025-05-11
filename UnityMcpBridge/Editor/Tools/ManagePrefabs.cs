@@ -229,9 +229,20 @@ namespace UnityMcpBridge.Editor.Tools
 
                 // Build the full hierarchy path to the new instance
                 string path = GetGameObjectPath(instance);
+                
+                // Extract the prefab name for easier reference
+                string prefabName = System.IO.Path.GetFileNameWithoutExtension(prefabPath);
+                
+                Debug.Log($"[ManagePrefabs] Instantiated prefab '{prefabPath}' as GameObject '{instance.name}' at path '{path}'");
 
                 return Response.Success($"Prefab '{prefabPath}' instantiated successfully.", 
-                    new { path = path, gameObjectName = instance.name });
+                    new { 
+                        path = path, 
+                        gameObjectName = instance.name,
+                        prefabName = prefabName,
+                        prefabPath = prefabPath,
+                        instanceId = instance.GetInstanceID()
+                    });
             }
             catch (Exception e)
             {

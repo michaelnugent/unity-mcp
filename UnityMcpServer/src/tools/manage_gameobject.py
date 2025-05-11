@@ -51,7 +51,7 @@ class GameObjectTool(BaseTool):
         "create": {"name": str},
         "modify": {"target": str},
         "delete": {"target": str},
-        "find": {"search_term": str},
+        "find": {"searchTerm": str},
         "get_children": {"target": str},
         "get_components": {"target": str},
         "add_component": {"target": str, "componentsToAdd": list},

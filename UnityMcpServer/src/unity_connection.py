@@ -28,6 +28,28 @@ class UnityConnection:
     port: int = config.unity_port
     sock: socket.socket = None  # Socket for Unity communication
 
+    def __init__(self, host='localhost', port=6400, sock=None):
+        """Initialize a connection to the Unity Editor.
+        
+        Args:
+            host: The hostname or IP address where Unity is running
+            port: The port number Unity is listening on
+            sock: An optional existing socket to use
+        """
+        self.host = host
+        self.port = port
+        self.sock = sock or self._connect()
+        logger.info(f"Connected to Unity at {host}:{port}")
+
+    def _connect(self):
+        """Create a new socket connection to Unity."""
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.connect((self.host, self.port))
+            return sock
+        except socket.error as e:
+            raise ConnectionError(f"Failed to connect to Unity at {self.host}:{self.port}: {str(e)}")
+
     def connect(self) -> bool:
         """Establish a connection to the Unity Editor."""
         if self.sock:
@@ -176,6 +198,30 @@ class UnityConnection:
             logger.error(f"Communication error with Unity: {str(e)}")
             self.sock = None
             raise ConnectionError(f"Failed to communicate with Unity: {str(e)}")
+
+    def reconnect(self):
+        """Reestablish the connection to Unity if it was lost.
+        
+        This method will attempt to create a new socket connection, and update
+        the internal socket reference if successful.
+        
+        Returns:
+            bool: True if reconnection was successful, False otherwise
+            
+        Raises:
+            ConnectionError: If unable to reconnect to Unity
+        """
+        # Close the existing socket if it exists
+        if self.sock:
+            try:
+                self.sock.close()
+            except:
+                pass  # Ignore errors closing the socket
+                
+        # Create a new connection
+        self.sock = self._connect()
+        logger.info(f"Reconnected to Unity at {self.host}:{self.port}")
+        return True
 
 # Global Unity connection
 _unity_connection = None

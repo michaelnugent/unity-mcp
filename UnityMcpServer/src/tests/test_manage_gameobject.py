@@ -77,11 +77,11 @@ def registered_tool(mock_fastmcp, mock_unity_connection):
                 mock_unity_connection.send_command("manage_gameobject", converted_params)
                 return mock_unity_connection.send_command.return_value
             
-            # For all other cases, do validation
+            # For all other cases, do validation on the converted parameters
             if action:
-                # Validate snake_case parameters (before conversion)
-                gameobject_tool.validate_params(action, params)
-                gameobject_tool.additional_validation(action, params)
+                # Validate camelCase parameters (after conversion)
+                gameobject_tool.validate_params(action, converted_params)
+                gameobject_tool.additional_validation(action, converted_params)
             
             # Call Unity with converted parameters
             mock_unity_connection.send_command("manage_gameobject", converted_params)

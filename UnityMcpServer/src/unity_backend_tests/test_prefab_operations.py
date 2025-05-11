@@ -86,11 +86,13 @@ class TestPrefabOperations:
     def _find_instantiated_prefab_name(self, prefab_base_name, gameobject_tool):
         """Helper to find the instantiated prefab's name by searching for both base and (Clone) names."""
         clone_name = f"{prefab_base_name}(Clone)"
-        for _ in range(10):
-            for search_name in (clone_name, prefab_base_name):
+        for _ in range(2):
+            #for search_name in (clone_name, prefab_base_name):
+            for search_name in [prefab_base_name]:
                 find_instantiated_result = gameobject_tool.send_command("manage_gameobject", {
                     "action": "find",
-                    "search_term": search_name
+                    "search_term": search_name,
+                    "searchTerm": search_name,
                 })
                 logger.info(f"Find instantiated prefab response for '{search_name}': {find_instantiated_result}")
                 if find_instantiated_result.get("success") and find_instantiated_result.get("data"):
@@ -99,7 +101,7 @@ class TestPrefabOperations:
                         return found[0].get("name", search_name)
                     elif isinstance(found, dict) and "name" in found:
                         return found["name"]
-            time.sleep(0.1)
+            time.sleep(0.5)
         logger.error(f"Instantiated prefab not found in scene after retries. Tried both '{clone_name}' and '{prefab_base_name}'.")
         pytest.fail(f"Instantiated prefab not found in scene after retries. Tried both '{clone_name}' and '{prefab_base_name}'.")
 
@@ -184,6 +186,26 @@ class TestPrefabOperations:
         except Exception as e:
             logger.error(f"Error during prefab creation test: {e}")
             pytest.fail(f"Prefab creation test failed: {e}")
+
+    def test_find_gameobject(self, unity_conn):
+        """Test finding a GameObject in the scene.
+        
+        This test finds a GameObject in the scene using the GameObjectTool.
+        
+        Args:
+            unity_conn: The Unity connection fixture
+        """
+        self.gameobject_tool.unity_conn = unity_conn
+
+        name = "TestPrefab_1746942643"
+        find_result = self.gameobject_tool.send_command("manage_gameobject", {
+            "action": "find",
+            "search_term": name,
+            #"searchTerm": name,
+        })
+        logger.info(f"Find GameObject response: {find_result}")
+        assert find_result["success"] is True, f"Failed to find GameObject: {find_result.get('error', '')}"
+        pytest.fail("Failed to find GameObject")
     
     def test_instantiate_prefab(self, unity_conn):
         """Test instantiating a prefab in the scene.
@@ -223,8 +245,8 @@ class TestPrefabOperations:
             # Create a prefab from the GameObject using both parameter formats
             create_prefab_result = self.prefab_tool.send_command("manage_prefabs", {
                 "action": "create",
-                # "gameObjectPath": self.test_gameobject_name,
-                # "destinationPath": self.test_prefab_path,
+                "gameObjectPath": self.test_gameobject_name,
+                "destinationPath": self.test_prefab_path,
                 "game_object_path": self.test_gameobject_name,
                 "destination_path": self.test_prefab_path
             })

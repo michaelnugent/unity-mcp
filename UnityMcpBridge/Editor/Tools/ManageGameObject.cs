@@ -35,7 +35,7 @@ namespace UnityMcpBridge.Editor.Tools
 
             // Parameters used by various actions
             JToken targetToken = @params["target"]; // Can be string (name/path) or int (instanceID)
-            string searchMethod = @params["searchMethod"]?.ToString().ToLower();
+            string searchMethod = @params["search_method"]?.ToString().ToLower();
 
             // Get common parameters (consolidated)
             string name = @params["name"]?.ToString();
@@ -68,15 +68,15 @@ namespace UnityMcpBridge.Editor.Tools
                     JObject properties = null;
                     if (action == "set_component_property")
                     {
-                        string compName = @params["componentName"]?.ToString();
-                        JObject compProps = @params["componentProperties"]?[compName] as JObject; // Handle potential nesting
+                        string compName = @params["component_name"]?.ToString();
+                        JObject compProps = @params["component_properties"]?[compName] as JObject; // Handle potential nesting
                         if (string.IsNullOrEmpty(compName))
                             return Response.Error(
-                                "Missing 'componentName' for 'set_component_property' on prefab."
+                                "Missing 'component_name' for 'set_component_property' on prefab."
                             );
                         if (compProps == null)
                             return Response.Error(
-                                $"Missing or invalid 'componentProperties' for component '{compName}' for 'set_component_property' on prefab."
+                                $"Missing or invalid 'component_properties' for component '{compName}' for 'set_component_property' on prefab."
                             );
 
                         properties = new JObject();
@@ -84,10 +84,10 @@ namespace UnityMcpBridge.Editor.Tools
                     }
                     else // action == "modify"
                     {
-                        properties = @params["componentProperties"] as JObject;
+                        properties = @params["component_properties"] as JObject;
                         if (properties == null)
                             return Response.Error(
-                                "Missing 'componentProperties' for 'modify' action on prefab."
+                                "Missing 'component_properties' for 'modify' action on prefab."
                             );
                     }
 
@@ -124,7 +124,9 @@ namespace UnityMcpBridge.Editor.Tools
                     case "delete":
                         return DeleteGameObject(targetToken, searchMethod);
                     case "find":
-                        return FindGameObjects(@params, targetToken, searchMethod);
+                        var result = FindGameObjects(@params, targetToken, searchMethod);
+                        Debug.Log($"[ManageGameObject] FindGameObjects result: {result}");
+                        return result;
                     case "get_components":
                         string getCompTarget = targetToken?.ToString(); // Expect name, path, or ID string
                         if (getCompTarget == null)
@@ -161,10 +163,10 @@ namespace UnityMcpBridge.Editor.Tools
             }
 
             // Get prefab creation parameters
-            bool saveAsPrefab = @params["saveAsPrefab"]?.ToObject<bool>() ?? false;
-            string prefabPath = @params["prefabPath"]?.ToString();
+            bool saveAsPrefab = @params["save_as_prefab"]?.ToObject<bool>() ?? false;
+            string prefabPath = @params["prefab_path"]?.ToString();
             string tag = @params["tag"]?.ToString(); // Get tag for creation
-            string primitiveType = @params["primitiveType"]?.ToString(); // Keep primitiveType check
+            string primitiveType = @params["primitive_type"]?.ToString(); // Keep primitiveType check
             GameObject newGo = null; // Initialize as null
 
             // --- Try Instantiating Prefab First ---
@@ -422,7 +424,7 @@ namespace UnityMcpBridge.Editor.Tools
             }
 
             // Add Components
-            if (@params["componentsToAdd"] is JArray componentsToAddArray)
+            if (@params["components_to_add"] is JArray componentsToAddArray)
             {
                 foreach (var compToken in componentsToAddArray)
                 {
@@ -435,7 +437,7 @@ namespace UnityMcpBridge.Editor.Tools
                     }
                     else if (compToken is JObject compObj)
                     {
-                        typeName = compObj["typeName"]?.ToString();
+                        typeName = compObj["type_name"]?.ToString();
                         properties = compObj["properties"] as JObject;
                     }
 
@@ -451,7 +453,7 @@ namespace UnityMcpBridge.Editor.Tools
                     else
                     {
                         Debug.LogWarning(
-                            $"[ManageGameObject] Invalid component format in componentsToAdd: {compToken}"
+                            $"[ManageGameObject] Invalid component format in components_to_add: {compToken}"
                         );
                     }
                 }
@@ -468,7 +470,7 @@ namespace UnityMcpBridge.Editor.Tools
                     // Clean up the created object before returning error
                     UnityEngine.Object.DestroyImmediate(newGo);
                     return Response.Error(
-                        "'prefabPath' is required when 'saveAsPrefab' is true and creating a new object."
+                        "'prefab_path' is required when 'save_as_prefab' is true and creating a new object."
                     );
                 }
                 // Ensure the *saving* path ends with .prefab
@@ -484,7 +486,7 @@ namespace UnityMcpBridge.Editor.Tools
                 // if (!prefabPath.EndsWith(".prefab", StringComparison.OrdinalIgnoreCase))
                 // {
                 //     UnityEngine.Object.DestroyImmediate(newGo);
-                //     return Response.Error($"'prefabPath' must end with '.prefab'. Provided: '{prefabPath}'");
+                //     return Response.Error($"'prefab_path' must end with '.prefab'. Provided: '{prefab_path}'");
                 // }
 
                 try
@@ -625,7 +627,7 @@ namespace UnityMcpBridge.Editor.Tools
             }
 
             // Set Active State
-            bool? setActive = @params["setActive"]?.ToObject<bool?>();
+            bool? setActive = @params["set_active"]?.ToObject<bool?>();
             if (setActive.HasValue && targetGo.activeSelf != setActive.Value)
             {
                 targetGo.SetActive(setActive.Value);
@@ -731,7 +733,7 @@ namespace UnityMcpBridge.Editor.Tools
             // Note: These might need more specific Undo recording per component
 
             // Remove Components
-            if (@params["componentsToRemove"] is JArray componentsToRemoveArray)
+            if (@params["components_to_remove"] is JArray componentsToRemoveArray)
             {
                 foreach (var compToken in componentsToRemoveArray)
                 {
@@ -747,7 +749,7 @@ namespace UnityMcpBridge.Editor.Tools
             }
 
             // Add Components (similar to create)
-            if (@params["componentsToAdd"] is JArray componentsToAddArrayModify)
+            if (@params["components_to_add"] is JArray componentsToAddArrayModify)
             {
                 foreach (var compToken in componentsToAddArrayModify)
                 {
@@ -758,7 +760,7 @@ namespace UnityMcpBridge.Editor.Tools
                         typeName = compToken.ToString();
                     else if (compToken is JObject compObj)
                     {
-                        typeName = compObj["typeName"]?.ToString();
+                        typeName = compObj["type_name"]?.ToString();
                         properties = compObj["properties"] as JObject;
                     }
 
@@ -773,7 +775,7 @@ namespace UnityMcpBridge.Editor.Tools
             }
 
             // Set Component Properties
-            if (@params["componentProperties"] is JObject componentPropertiesObj)
+            if (@params["component_properties"] is JObject componentPropertiesObj)
             {
                 foreach (var prop in componentPropertiesObj.Properties())
                 {
@@ -860,6 +862,7 @@ namespace UnityMcpBridge.Editor.Tools
             string searchMethod
         )
         {
+            Debug.Log($"[MCP-DEBUG] FindGameObjects: @params: {@params}");
             bool findAll = @params["find_all"]?.ToObject<bool>() ?? false;
             bool searchInactive = @params["search_inactive"]?.ToObject<bool>() ?? false;
             bool searchInChildren = @params["search_in_children"]?.ToObject<bool>() ?? false;
@@ -873,6 +876,7 @@ namespace UnityMcpBridge.Editor.Tools
             // Check if we need a search term
             if (searchTermEmpty && !isIdSearch && !findAll)
             {
+                Debug.Log($"[MCP-DEBUG] FindGameObjects: Search term is empty and not searching by ID.");
                 return Response.Error("Search term is required when find_all is false and not searching by ID.");
             }
 
@@ -883,12 +887,21 @@ namespace UnityMcpBridge.Editor.Tools
                 ["searchTerm"] = searchTerm,
             };
 
+            Debug.Log($"[MCP-DEBUG] FindGameObjects: findParams: {findParams}");
+
             List<GameObject> results = FindObjectsInternal(
                 targetToken,
                 searchMethod,
                 findAll,
                 findParams
             );
+
+            // log results details
+            Debug.Log($"[MCP-DEBUG] FindGameObjects: results: {results.Count}");
+            foreach (var result in results)
+            {
+                Debug.Log($"[MCP-DEBUG] FindGameObjects: result: {result.name}");
+            }
 
             // Handle empty results with better error messages
             if (results.Count == 0)
@@ -909,6 +922,8 @@ namespace UnityMcpBridge.Editor.Tools
 
             // Use SerializationUtilities instead of manually serializing each GameObject
             var serializedResults = SerializationUtilities.SerializeUnityObjects(results, "manage_gameobject");
+            // debug log serializedResults
+            Debug.Log($"[MCP-DEBUG] serializedResults: {serializedResults}");
             var response = SerializationUtilities.SerializeResponse(
                 "manage_gameobject",
                 $"Found {results.Count} game objects.",
@@ -924,7 +939,7 @@ namespace UnityMcpBridge.Editor.Tools
         )
         {
             // Validate inputs before proceeding
-            if (targetToken == null && (findParams == null || findParams["searchTerm"] == null))
+            if (targetToken == null && (findParams == null || findParams["search_term"] == null))
             {
                 Debug.LogWarning("[ManageGameObject.Find] Both targetToken and searchTerm are null or empty.");
                 return null;
@@ -990,13 +1005,13 @@ namespace UnityMcpBridge.Editor.Tools
             JObject properties = null;
 
             // Allow adding component specified directly or via componentsToAdd array (take first)
-            if (@params["componentName"] != null)
+            if (@params["component_name"] != null)
             {
-                typeName = @params["componentName"]?.ToString();
-                properties = @params["componentProperties"]?[typeName] as JObject; // Check if props are nested under name
+                typeName = @params["component_name"]?.ToString();
+                properties = @params["component_properties"]?[typeName] as JObject; // Check if props are nested under name
             }
             else if (
-                @params["componentsToAdd"] is JArray componentsToAddArray
+                @params["components_to_add"] is JArray componentsToAddArray
                 && componentsToAddArray.Count > 0
             )
             {
@@ -1005,7 +1020,7 @@ namespace UnityMcpBridge.Editor.Tools
                     typeName = compToken.ToString();
                 else if (compToken is JObject compObj)
                 {
-                    typeName = compObj["typeName"]?.ToString();
+                    typeName = compObj["type_name"]?.ToString();
                     properties = compObj["properties"] as JObject;
                 }
             }
@@ -1013,7 +1028,7 @@ namespace UnityMcpBridge.Editor.Tools
             if (string.IsNullOrEmpty(typeName))
             {
                 return Response.Error(
-                    "Component type name ('componentName' or first element in 'componentsToAdd') is required."
+                    "Component type name ('component_name' or first element in 'components_to_add') is required."
                 );
             }
 
@@ -1044,12 +1059,12 @@ namespace UnityMcpBridge.Editor.Tools
 
             string typeName = null;
             // Allow removing component specified directly or via componentsToRemove array (take first)
-            if (@params["componentName"] != null)
+            if (@params["component_name"] != null)
             {
-                typeName = @params["componentName"]?.ToString();
+                typeName = @params["component_name"]?.ToString();
             }
             else if (
-                @params["componentsToRemove"] is JArray componentsToRemoveArray
+                @params["components_to_remove"] is JArray componentsToRemoveArray
                 && componentsToRemoveArray.Count > 0
             )
             {
@@ -1059,7 +1074,7 @@ namespace UnityMcpBridge.Editor.Tools
             if (string.IsNullOrEmpty(typeName))
             {
                 return Response.Error(
-                    "Component type name ('componentName' or first element in 'componentsToRemove') is required."
+                    "Component type name ('component_name' or first element in 'components_to_remove') is required."
                 );
             }
 
@@ -1088,26 +1103,26 @@ namespace UnityMcpBridge.Editor.Tools
                 );
             }
 
-            string compName = @params["componentName"]?.ToString();
+            string compName = @params["component_name"]?.ToString();
             JObject propertiesToSet = null;
 
             if (!string.IsNullOrEmpty(compName))
             {
                 // Properties might be directly under componentProperties or nested under the component name
-                if (@params["componentProperties"] is JObject compProps)
+                if (@params["component_properties"] is JObject compProps)
                 {
                     propertiesToSet = compProps[compName] as JObject ?? compProps; // Allow flat or nested structure
                 }
             }
             else
             {
-                return Response.Error("'componentName' parameter is required.");
+                return Response.Error("'component_name' parameter is required.");
             }
 
             if (propertiesToSet == null || !propertiesToSet.HasValues)
             {
                 return Response.Error(
-                    "'componentProperties' dictionary for the specified component is required and cannot be empty."
+                    "'component_properties' dictionary for the specified component is required and cannot be empty."
                 );
             }
 
@@ -1133,7 +1148,7 @@ namespace UnityMcpBridge.Editor.Tools
         )
         {
             List<GameObject> results = new List<GameObject>();
-            string searchTerm = findParams?["searchTerm"]?.ToString() ?? targetToken?.ToString(); // Use searchTerm if provided, else the target itself
+            string searchTerm = findParams?["search_term"]?.ToString() ?? targetToken?.ToString(); // Use searchTerm if provided, else the target itself
             bool searchInChildren = findParams?["searchInChildren"]?.ToObject<bool>() ?? false;
             bool searchInactive = findParams?["searchInactive"]?.ToObject<bool>() ?? false;
 
@@ -2013,9 +2028,9 @@ namespace UnityMcpBridge.Editor.Tools
                         }
 
                         // Find the target GameObject
-                        // Pass 'searchInactive: true' for internal lookups to be more robust
+                        // Pass 'search_inactive: true' for internal lookups to be more robust
                         JObject findParams = new JObject();
-                        findParams["searchInactive"] = true;
+                        findParams["search_inactive"] = true;
                         GameObject foundGo = FindObjectInternal(findToken, findMethod, findParams);
 
                         if (foundGo == null)

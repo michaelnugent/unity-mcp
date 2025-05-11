@@ -114,9 +114,17 @@ namespace UnityMcpBridge.Editor.Helpers
                 if (obj == null)
                     continue;
                     
-                result.Add(SerializationHelper.CreateSerializationResult(obj, depth).Data);
+                var serializedResult = SerializationHelper.CreateSerializationResult(obj, depth);
+                // log serializedResult in detail   
+                Debug.Log($"[SERIALIZATION] adding serializedResult: {serializedResult}");
+                result.Add(serializedResult);
             }
-            
+
+            // log result in detail
+            foreach (var item in result)
+            {
+                Debug.Log($"[SERIALIZATION] item: {item}");
+            }
             return result;
         }
     }

@@ -314,7 +314,7 @@ class BaseTool:
     async def send_command_async(self, command_type: str, params: Dict[str, Any] = None) -> Dict[str, Any]:
         """Send a command to Unity asynchronously with parameter validation and conversion.
         
-        This is an async wrapper around send_command that runs the synchronous code in a thread pool.
+        This is an async wrapper around send_command.
         
         Args:
             command_type: The type of command to send
@@ -326,7 +326,7 @@ class BaseTool:
         Raises:
             ParameterValidationError: If parameters fail validation
         """
-        # Run the synchronous send_command in a thread pool to avoid blocking
+        # Run the synchronous send_command
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(
             None, self.send_command, command_type, params

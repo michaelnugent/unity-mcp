@@ -413,9 +413,13 @@ namespace UnityMcpBridge.Editor
 
                 // Using command registry to execute command
                 object result = Tools.CommandRegistry.ExecuteCommand(command.type, paramsObject);
+                // log result
+                Debug.Log($"[EXECUTION] result: {result}");
 
                 // Standard success response format
                 var response = new { status = "success", result };
+                // log response
+                Debug.Log($"[EXECUTION] response: {response}");
                 return JsonConvert.SerializeObject(response, SerializerSettings);
             }
             catch (Exception ex)

@@ -64,7 +64,7 @@ class TestGameObjectOperations:
         # Use the "find" action which is valid in the GameObjectTool
         find_result = self.gameobject_tool.send_command("manage_gameobject", {
             "action": "find",
-            "searchTerm": "TestObject"
+            "search_term": "TestObject"
         })
     
         # Log the find result
@@ -99,7 +99,7 @@ class TestGameObjectOperations:
         simple_result = self.gameobject_tool.send_command("manage_gameobject", {
             "action": "add_component",
             "target": "TestComponentFormats",
-            "componentsToAdd": ["Rigidbody"]  # Simple name
+            "components_to_add": ["Rigidbody"]  # Simple name
         })
         
         # Log the result
@@ -114,7 +114,7 @@ class TestGameObjectOperations:
         qualified_result = self.gameobject_tool.send_command("manage_gameobject", {
             "action": "add_component",
             "target": "TestComponentFormats",
-            "componentsToAdd": ["UnityEngine.BoxCollider"]  # Qualified name
+            "components_to_add": ["UnityEngine.BoxCollider"]  # Qualified name
         })
         
         # Log the result
@@ -154,7 +154,7 @@ class TestGameObjectOperations:
         component_result = self.gameobject_tool.send_command("manage_gameobject", {
             "action": "add_component",
             "target": "TestPropertyValidation",
-            "componentsToAdd": ["Rigidbody"]
+            "components_to_add": ["Rigidbody"]
         })
         logger.info(f"Add component result: {component_result}")
         
@@ -163,12 +163,12 @@ class TestGameObjectOperations:
             logger.warning("Couldn't add Rigidbody component, skipping property validation")
             return
         
-        # The componentProperties parameter should be a dictionary with component types as keys
+        # The component_properties parameter should be a dictionary with component types as keys
         # and property dictionaries as values, based on the validation error
         valid_props_result = self.gameobject_tool.send_command("manage_gameobject", {
             "action": "set_component_property",
             "target": "TestPropertyValidation",
-            "componentProperties": {
+            "component_properties": {
                 "Rigidbody": {
                     "mass": 5.0,
                     "isKinematic": True,
@@ -192,7 +192,7 @@ class TestGameObjectOperations:
             invalid_props_result = self.gameobject_tool.send_command("manage_gameobject", {
                 "action": "set_component_property",
                 "target": "TestPropertyValidation",
-                "componentProperties": {
+                "component_properties": {
                     "Rigidbody": {
                         "nonExistentProperty": "invalid"  # This property doesn't exist
                     }
@@ -234,7 +234,7 @@ class TestGameObjectOperations:
             result = self.gameobject_tool.send_command("manage_gameobject", {
                 "action": "add_component",
                 "target": "TestComponentTypeValidation",
-                "componentsToAdd": ["NonExistentComponent"]  # This component doesn't exist
+                "components_to_add": ["NonExistentComponent"]  # This component doesn't exist
             })
             
             # If we get here without an exception, the validation should have failed
@@ -282,7 +282,7 @@ class TestGameObjectOperations:
         add_result = self.gameobject_tool.send_command("manage_gameobject", {
             "action": "add_component",
             "target": "TestComponentObject",
-            "componentsToAdd": ["UnityEngine.Rigidbody"]
+            "components_to_add": ["UnityEngine.Rigidbody"]
         })
         
         # Log the complete response
@@ -311,7 +311,7 @@ class TestGameObjectOperations:
         remove_result = self.gameobject_tool.send_command("manage_gameobject", {
             "action": "remove_component",
             "target": "TestComponentObject",
-            "componentsToRemove": ["UnityEngine.Rigidbody"]
+            "components_to_remove": ["UnityEngine.Rigidbody"]
         })
         
         # Log the complete response
@@ -355,7 +355,7 @@ class TestGameObjectOperations:
         # Get the GameObject to verify changes - use "find" instead of "get"
         find_result = self.gameobject_tool.send_command("manage_gameobject", {
             "action": "find",
-            "searchTerm": "TestModifyObject"
+            "search_term": "TestModifyObject"
         })
         assert find_result["success"] is True
         logger.info(f"Find GameObject after modification: {find_result}")

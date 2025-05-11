@@ -51,6 +51,13 @@ namespace UnityMcpBridge.Editor.Helpers.Serialization
                 _currentPath.Pop();
             }
         }
+
+        public void DebugLogPath(string prefix = "")
+        {
+            Debug.Log($"{prefix}[CIRCULAR REFERENCE TRACKER] Current path: {GetCurrentPath()}");
+            Debug.Log($"{prefix}[CIRCULAR REFERENCE TRACKER] Object paths: {string.Join(", ", _objectPaths.Select(kvp => $"{kvp.Key} -> {kvp.Value}"))}");
+            Debug.Log($"{prefix}[CIRCULAR REFERENCE TRACKER] Circular references: {string.Join(", ", _circularReferences.Select(kvp => $"{kvp.Key} -> {kvp.Value}"))}");
+        }
         
         /// <summary>
         /// Gets the current serialization path.

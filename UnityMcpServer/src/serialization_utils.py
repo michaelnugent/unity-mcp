@@ -97,24 +97,55 @@ def get_gameobject_components_by_type(gameobject: SerializedObject, component_ty
     Returns:
         List of matching component objects
     """
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    logger.info(f"Looking for components of type '{component_type}' in gameobject")
+    
     if not is_serialized_unity_object(gameobject):
+        logger.info("Object is not a serialized Unity object")
         return []
         
     components = get_unity_components(gameobject)
+    logger.info(f"Found {len(components)} components in the gameobject")
+    
+    # Normalize component_type by removing namespace if present
+    if '.' in component_type:
+        short_type = component_type.split('.')[-1]
+    else:
+        short_type = component_type
+    
+    logger.info(f"Normalized type: short_type='{short_type}', full_type='{component_type}'")
+    
     matching_components = []
     
-    for component in components:
-        type_info = extract_type_info(component)
-        if not type_info:
-            continue
+    for i, component in enumerate(components):
+        # Get the component type directly from __unity_type or __type
+        unity_type = component.get(SERIALIZATION_UNITY_TYPE_KEY, '')
+        type_name = component.get(SERIALIZATION_TYPE_KEY, '')
+        
+        logger.info(f"Examining component {i}: unity_type='{unity_type}', type='{type_name}'")
+        
+        # Extract short name from unity_type if it has a namespace
+        if '.' in unity_type:
+            unity_short_type = unity_type.split('.')[-1]
+        else:
+            unity_short_type = unity_type
             
-        unity_type = type_info.get('unity_type', '')
-        # Match by exact type, type with namespace, or end of type name
-        if (unity_type == component_type or
-            component_type in unity_type or 
-            unity_type.endswith(f".{component_type}")):
+        logger.info(f"Component {i} short type: '{unity_short_type}'")
+        
+        # Match by checking all possible forms of the type name
+        if (unity_type == component_type or                 # Exact full type match
+            unity_short_type == short_type or               # Short name match
+            type_name == short_type or                      # Type name match
+            unity_type.endswith(f".{short_type}")           # Namespace ending match
+           ):
+            logger.info(f"Component {i} MATCHED the search criteria")
             matching_components.append(component)
+        else:
+            logger.info(f"Component {i} did NOT match the search criteria")
             
+    logger.info(f"Found {len(matching_components)} matching components")
     return matching_components
 
 def find_gameobject_in_hierarchy(root: SerializedObject, name: str) -> Optional[SerializedObject]:

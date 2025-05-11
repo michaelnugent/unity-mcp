@@ -474,7 +474,11 @@ def extract_type_info(obj):
         # Store the short name (without namespace) for 'type'
         type_info['type'] = full_type.split('.')[-1] if '.' in full_type else full_type
         # Store the full type name including namespace for 'unity_type'
-        type_info['unity_type'] = full_type
+        if '.' in full_type:
+            type_info['unity_type'] = full_type
+        else:
+            # Add UnityEngine namespace if it's just a short name
+            type_info['unity_type'] = f"UnityEngine.{full_type}"
         
     elif SERIALIZATION_UNITY_TYPE_KEY in obj:
         full_type = obj[SERIALIZATION_UNITY_TYPE_KEY]
@@ -506,6 +510,10 @@ def extract_type_info(obj):
         # Set 'unity_type' if not already set - full namespace
         if 'unity_type' not in type_info:
             type_info['unity_type'] = full_type
+    
+    # Ensure unity_type has UnityEngine namespace for built-in types
+    if 'unity_type' in type_info and '.' not in type_info['unity_type']:
+        type_info['unity_type'] = f"UnityEngine.{type_info['unity_type']}"
         
     # Handle ID information - check several possible sources
     if SERIALIZATION_ID_KEY in obj:

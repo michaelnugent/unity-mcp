@@ -882,9 +882,9 @@ namespace UnityMcpBridge.Editor.Tools
 
             JObject findParams = new JObject
             {
-                ["searchInactive"] = searchInactive,
-                ["searchInChildren"] = searchInChildren,
-                ["searchTerm"] = searchTerm,
+                ["search_inactive"] = searchInactive,
+                ["search_in_children"] = searchInChildren,
+                ["search_term"] = searchTerm,
             };
 
             Debug.Log($"[MCP-DEBUG] FindGameObjects: findParams: {findParams}");

@@ -64,7 +64,8 @@ class TestGameObjectOperations:
         # Use the "find" action which is valid in the GameObjectTool
         find_result = self.gameobject_tool.send_command("manage_gameobject", {
             "action": "find",
-            "search_term": "TestObject"
+            "search_term": "TestObject",
+            "search_method": "by_name",
         })
     
         # Log the find result

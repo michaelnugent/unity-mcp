@@ -66,6 +66,10 @@ def registered_tool(mock_fastmcp, mock_unity_connection):
         # But keep original in params for the test_scene_tool_action_case_insensitivity test
         action_lower = action.lower() if action else ""
         
+        # Update the action parameter to lowercase in params for all operations
+        if 'action' in params:
+            params['action'] = action_lower
+        
         # Handle validation-only mode
         if params.get('validateOnly') is True:
             mock_unity_connection.send_command.return_value = {
@@ -166,8 +170,8 @@ def registered_tool(mock_fastmcp, mock_unity_connection):
                     raise ParameterValidationError("get_component action requires 'game_object_name' and 'component_type' parameters")
                 
                 # Perform general validation (converts action to lowercase internally)
-                scene_tool.validate_params(action, params)
-                scene_tool.additional_validation(action, params)
+                scene_tool.validate_params(action_lower, params)
+                scene_tool.additional_validation(action_lower, params)
             
             # Return the mock response
             # For the action case insensitivity test, we need to use the actual provided action

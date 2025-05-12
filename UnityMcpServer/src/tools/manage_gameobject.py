@@ -4,6 +4,13 @@ Defines tools for managing GameObjects within Unity scenes through the MCP serve
 This module provides functionality for creating, modifying, and manipulating GameObjects
 in Unity scenes, including standard operations like instantiation, destruction,
 and property modification.
+
+For detailed parameter descriptions, examples and validation rules, see the 
+GameObjectFormat class definition.
+
+This format definition is used internally by the GameObjectTool class to provide
+consistent parameter validation, documentation, and examples. The MCP tool function
+includes these descriptions directly for accessibility through the MCP system.
 """
 import asyncio
 from typing import Dict, Any, Optional, List, Union, Literal, TypedDict
@@ -21,6 +28,7 @@ from .validation_layer import (
     validate_component_type, validate_action,
     validate_parameters_by_action, create_action_validator
 )
+from validation_utils import ParameterFormat
 
 class GameObjectInfo(TypedDict, total=False):
     """Information about a Unity GameObject"""
@@ -36,6 +44,151 @@ class GameObjectInfo(TypedDict, total=False):
     scale: Dict[str, float]
     path: str
 
+class GameObjectFormat(ParameterFormat):
+    """Parameter format definitions for the GameObject tool.
+    
+    This class defines the parameter formats, examples, validation rules,
+    required parameters, and valid actions for the GameObject tool.
+    """
+    
+    # Tool-specific parameter definitions
+    PARAMETERS = {
+        "target": {
+            "type": str,
+            "description": "Reference to a GameObject to operate on (name, path, or ID)",
+            "examples": ["Player", "Enemies/Enemy1", "MainCamera"],
+            "validation_rules": [
+                "Must be a valid GameObject name or path",
+                "Can be a hierarchical path like 'Parent/Child'"
+            ]
+        },
+        "name": {
+            "type": str,
+            "description": "Name to assign to the GameObject",
+            "examples": ["Player", "Enemy", "MainCamera"],
+            "validation_rules": ["Must be a valid GameObject name"]
+        },
+        "tag": {
+            "type": str,
+            "description": "Unity tag to assign to the GameObject",
+            "examples": ["Player", "Enemy", "Respawn"],
+            "validation_rules": ["Must be a valid Unity tag"]
+        },
+        "layer": {
+            "type": str,
+            "description": "Unity layer to assign to the GameObject",
+            "examples": ["Default", "UI", "Player"],
+            "validation_rules": ["Must be a valid Unity layer name or number"]
+        },
+        "parent": {
+            "type": str,
+            "description": "Parent GameObject reference",
+            "examples": ["World", "Player/WeaponSlot"],
+            "validation_rules": [
+                "Must be a valid GameObject name or path",
+                "Can be a hierarchical path like 'Parent/Child'"
+            ]
+        },
+        "set_active": {
+            "type": bool,
+            "description": "Whether the GameObject should be active",
+            "examples": [True, False],
+            "validation_rules": ["Must be a boolean value"]
+        },
+        "components_to_add": {
+            "type": List[str],
+            "description": "List of component types to add to the GameObject",
+            "examples": [["Rigidbody", "BoxCollider"], ["AudioSource"]],
+            "validation_rules": ["Must be a list of valid component type names"]
+        },
+        "components_to_remove": {
+            "type": List[str],
+            "description": "List of component types to remove from the GameObject",
+            "examples": [["Rigidbody", "BoxCollider"], ["AudioSource"]],
+            "validation_rules": ["Must be a list of valid component type names"]
+        },
+        "component_properties": {
+            "type": dict,
+            "description": "Properties to set on components",
+            "examples": [
+                {"Rigidbody": {"mass": 10.0, "useGravity": True}},
+                {"AudioSource": {"volume": 0.5, "pitch": 1.2}}
+            ],
+            "validation_rules": [
+                "Must be a dictionary mapping component names to property dictionaries",
+                "Component properties must be valid for the given component type"
+            ]
+        },
+        "search_term": {
+            "type": str,
+            "description": "Term to search for when finding GameObjects",
+            "examples": ["Player", "Enemy"],
+            "validation_rules": ["Must be a non-empty string"]
+        },
+        "search_method": {
+            "type": str,
+            "description": "Method to use when searching for GameObjects",
+            "examples": ["by_name", "by_tag", "by_path"],
+            "validation_rules": ["Must be one of: by_name, by_tag, by_path, by_id, by_type, by_component"]
+        },
+        "prefab_path": {
+            "type": str,
+            "description": "Path to a prefab asset",
+            "examples": ["Assets/Prefabs/Player.prefab", "Assets/Prefabs/Enemies/Zombie.prefab"],
+            "validation_rules": [
+                "Must be a valid asset path",
+                "Must point to a .prefab file",
+                "Must exist in the project (for instantiate action)"
+            ]
+        },
+        "primitive_type": {
+            "type": str,
+            "description": "Type of primitive GameObject to create",
+            "examples": ["Cube", "Sphere", "Capsule"],
+            "validation_rules": ["Must be one of: Cube, Sphere, Capsule, Cylinder, Plane, Quad"]
+        },
+        "include_inactive": {
+            "type": bool,
+            "description": "Whether to include inactive GameObjects in search results",
+            "examples": [True, False],
+            "validation_rules": ["Must be a boolean value"]
+        },
+        "search_in_children": {
+            "type": bool,
+            "description": "Whether to search in child GameObjects",
+            "examples": [True, False],
+            "validation_rules": ["Must be a boolean value"]
+        }
+    }
+    
+    # Required parameters by action
+    REQUIRED_PARAMETERS = {
+        "create": ["name"],
+        "modify": ["target"],
+        "delete": ["target"],
+        "find": ["search_term"],
+        "get_children": ["target"],
+        "get_components": ["target"],
+        "add_component": ["target", "components_to_add"],
+        "remove_component": ["target", "components_to_remove"],
+        "set_component_property": ["target", "component_properties"],
+        "set_active": ["target", "set_active"],
+        "set_position": ["target", "position"],
+        "set_rotation": ["target", "rotation"],
+        "set_scale": ["target", "scale"],
+        "set_parent": ["target", "parent"],
+        "instantiate": ["prefab_path"],
+        "duplicate": ["target"]
+    }
+    
+    # Valid actions
+    VALID_ACTIONS = [
+        "create", "modify", "delete", "find", "get_children", "get_components", 
+        "add_component", "remove_component", "set_component_property", 
+        "set_active", "set_position", "set_rotation", "set_scale", 
+        "set_parent", "instantiate", "duplicate"
+    ]
+
 class GameObjectTool(BaseTool):
     """Tool for managing Unity GameObjects.
     
@@ -45,26 +198,7 @@ class GameObjectTool(BaseTool):
     """
     
     tool_name = "manage_gameobject"
-    
-    # Define required parameters for each action
-    required_params = {
-        "create": {"name": str},
-        "modify": {"target": str},
-        "delete": {"target": str},
-        "find": {"search_term": str},
-        "get_children": {"target": str},
-        "get_components": {"target": str},
-        "add_component": {"target": str, "components_to_add": list},
-        "remove_component": {"target": str, "components_to_remove": list},
-        "set_component_property": {"target": str, "component_properties": dict},
-        "set_active": {"target": str, "set_active": bool},
-        "set_position": {"target": str, "position": list},
-        "set_rotation": {"target": str, "rotation": list},
-        "set_scale": {"target": str, "scale": list},
-        "set_parent": {"target": str, "parent": str},
-        "instantiate": {"prefab_path": str},
-        "duplicate": {"target": str},
-    }
+    parameter_format = GameObjectFormat
     
     # Define parameters that should be validated as Vector3
     vector3_params = ["position", "scale"]
@@ -99,13 +233,7 @@ class GameObjectTool(BaseTool):
         """
         try:
             # Validate action is supported
-            valid_actions = [
-                "create", "modify", "delete", "find", "get_children", "get_components", 
-                "add_component", "remove_component", "set_component_property", 
-                "set_active", "set_position", "set_rotation", "set_scale", 
-                "set_parent", "instantiate", "duplicate"
-            ]
-            validate_action(action, valid_actions)
+            validate_action(action, self.parameter_format.VALID_ACTIONS)
             
             # Validate prefab path format and extension
             if action in ["create", "instantiate"] and params.get("prefab_path"):
@@ -124,111 +252,81 @@ class GameObjectTool(BaseTool):
                     raise ParameterValidationError(
                         "Cannot create default prefab path: 'name' parameter is missing"
                     )
-            
-            # Validate GameObject target
-            if "target" in params and params.get("target"):
-                try:
-                    validate_gameobject_path(
-                        params["target"],
-                        must_exist=(action not in ["create", "instantiate"])
-                    )
-                except Exception as e:
-                    raise ParameterValidationError(f"Invalid target GameObject: {str(e)}")
-            
-            # Validate parent reference
-            if "parent" in params and params.get("parent"):
-                try:
-                    validate_gameobject_path(params["parent"], must_exist=True)
-                except Exception as e:
-                    raise ParameterValidationError(f"Invalid parent GameObject: {str(e)}")
-            
-            # Validate components to add/remove
-            if "components_to_add" in params and params.get("components_to_add"):
-                for component_type in params["components_to_add"]:
-                    try:
-                        validate_component_type(component_type)
-                    except Exception as e:
-                        raise ParameterValidationError(f"Invalid component type to add: {component_type} - {str(e)}")
                     
-            if "components_to_remove" in params and params.get("components_to_remove"):
-                for component_type in params["components_to_remove"]:
-                    try:
-                        validate_component_type(component_type)
-                    except Exception as e:
-                        raise ParameterValidationError(f"Invalid component type to remove: {component_type} - {str(e)}")
-                    
-            # Validate component_properties format and structure
-            if "component_properties" in params and params.get("component_properties"):
-                if not isinstance(params["component_properties"], dict):
+            # Use parameter_format to get required parameters for the action
+            required_params = self.parameter_format.get_required_parameters(action)
+            # Validate all required parameters are present
+            for param_name in required_params:
+                if param_name not in params:
                     raise ParameterValidationError(
-                        "component_properties must be a dictionary"
+                        f"{self.tool_name} '{action}' action requires '{param_name}' parameter"
+                    )
+            
+            # Validate primitive type if specified
+            if params.get("primitive_type") and params["primitive_type"] not in self._valid_primitive_types:
+                raise ParameterValidationError(
+                    f"Parameter 'primitive_type' is invalid: {params['primitive_type']}. Valid types are: {', '.join(self._valid_primitive_types)}"
+                )
+                
+            # Validate search method if specified
+            if params.get("search_method") and params["search_method"] not in self._valid_search_methods:
+                raise ParameterValidationError(
+                    f"Parameter 'search_method' is invalid: {params['search_method']}. Valid methods are: {', '.join(self._valid_search_methods)}"
+                )
+                
+            # Validate component types in components_to_add and components_to_remove
+            if "components_to_add" in params:
+                for component_type in params["components_to_add"]:
+                    validate_component_type(component_type)
+                    
+            if "components_to_remove" in params:
+                for component_type in params["components_to_remove"]:
+                    validate_component_type(component_type)
+                    
+            # Validate component_properties structure
+            if "component_properties" in params:
+                comp_props = params["component_properties"]
+                if not isinstance(comp_props, dict):
+                    # Get example from parameter format for better error messages
+                    example = ""
+                    if self.parameter_format:
+                        param_examples = self.parameter_format.get_parameter_examples("component_properties")
+                        if param_examples and len(param_examples) > 0:
+                            import json
+                            example = f" Example: {json.dumps(param_examples[0], indent=2)}"
+                    
+                    raise ParameterValidationError(
+                        f"Parameter 'component_properties' must be of type dict, mapping component names to property dictionaries.{example}"
                     )
                 
-                # Support two formats:
-                # 1. With component_name: Flat properties structure for single component
-                # 2. Without component_name: Nested structure for multiple components
+                # If component_name is provided separately, the component_properties can be direct property values
+                # instead of being nested under the component name
                 if "component_name" in params and params["component_name"]:
-                    # With component_name, expect flat properties for the specified component
-                    component_type = params["component_name"]
-                    try:
-                        validate_component_type(component_type)
-                    except Exception as e:
-                        raise ParameterValidationError(f"Invalid component type: {component_type} - {str(e)}")
+                    # In this case, component_properties contains direct property values for the specified component
+                    # No need to validate the structure further, Unity will validate the actual properties
+                    pass
                 else:
-                    # Without component_name, we need nested structure for multiple components
-                    # Check each component's properties
-                    for component_type, properties in params["component_properties"].items():
-                        try:
-                            validate_component_type(component_type)
-                        except Exception as e:
-                            raise ParameterValidationError(f"Invalid component type in properties: {component_type} - {str(e)}")
-                        
-                        if not isinstance(properties, dict):
+                    # If no component_name is provided, then component_properties should map component names to property dicts
+                    for comp_name, props in comp_props.items():
+                        validate_component_type(comp_name)
+                        if not isinstance(props, dict):
                             raise ParameterValidationError(
-                                f"Properties for component '{component_type}' must be a dictionary"
+                                f"Properties for component '{comp_name}' must be a dictionary"
                             )
             
-            # Validate primitive type
-            if "primitive_type" in params and params.get("primitive_type"):
-                if params["primitive_type"] not in self._valid_primitive_types:
-                    raise ParameterValidationError(
-                        f"Invalid primitive_type: '{params['primitive_type']}'. "
-                        f"Valid types are: {', '.join(self._valid_primitive_types)}"
-                    )
-                    
-            # Validate search method
-            if "search_method" in params and params.get("search_method"):
-                if params["search_method"] not in self._valid_search_methods:
-                    raise ParameterValidationError(
-                        f"Invalid search_method: '{params['search_method']}'. "
-                        f"Valid methods are: {', '.join(self._valid_search_methods)}"
-                    )
+            # Validate GameObject references
+            if "target" in params:
+                validate_gameobject_path(params["target"], parameter_name="target")
+                
+            if "parent" in params:
+                validate_gameobject_path(params["parent"], parameter_name="parent")
             
-            # Validate position, rotation, and scale for vector3 format
-            # (Base validation will convert these, but we can do additional checks here)
-            for vector_param in ["position", "rotation", "scale"]:
-                if vector_param in params and params.get(vector_param) is not None:
-                    value = params[vector_param]
-                    
-                    # Check if it's a list/tuple of 3 numbers
-                    if isinstance(value, (list, tuple)):
-                        if len(value) != 3:
-                            raise ParameterValidationError(
-                                f"{vector_param} must be a list/tuple of 3 values, got {len(value)}"
-                            )
-                        
-                        for i, component in enumerate(value):
-                            if not isinstance(component, (int, float)):
-                                raise ParameterValidationError(
-                                    f"{vector_param}[{i}] must be a number, got {type(component).__name__}: {component}"
-                                )
-                                
         except ParameterValidationError:
-            # Re-raise ParameterValidationError as is to maintain the original message
+            # Re-raise validation errors
             raise
         except Exception as e:
-            # Wrap other exceptions with more context
-            raise ParameterValidationError(f"Error validating GameObject parameters: {str(e)}")
+            # Convert any other errors to parameter validation errors
+            raise ParameterValidationError(f"Validation error: {str(e)}")
     
     def post_process_response(self, response: Dict[str, Any], action: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Post-process the response to handle serialized GameObject objects.
@@ -678,30 +776,3 @@ def validate_component_type(component_type: Any) -> None:
     # Validate component type format (should be like UnityEngine.Transform or FullNamespace.ComponentName)
     if not (component_type.split(".")[-1] and component_type.split(".")[0]):
         raise ParameterValidationError(f"Component type must be in format 'Namespace.ComponentName', got: {component_type}")
-
-def validate_gameobject_path(path: Any, must_exist: bool = False) -> None:
-    """Validate a GameObject path parameter.
-
-    Args:
-        path: The path value to validate
-        must_exist: Whether the GameObject must exist (cannot be validated client-side, only format check)
-    
-    Returns:
-        None: This function doesn't return anything but raises exceptions on validation failure
-    
-    Raises:
-        ParameterValidationError: If validation fails
-    """
-    # Check type
-    if not isinstance(path, str):
-        raise ParameterValidationError(f"GameObject path must be a string, got {type(path).__name__}: {path}")
-    
-    # Check for empty path
-    if not path:
-        raise ParameterValidationError("GameObject path cannot be empty")
-    
-    # Check for valid path format (should not contain invalid characters like \ or ")
-    invalid_chars = ['\\', '"', '*', '<', '>', '|', ':', '?']
-    for char in invalid_chars:
-        if char in path:
-            raise ParameterValidationError(f"GameObject path contains invalid character '{char}': {path}") 

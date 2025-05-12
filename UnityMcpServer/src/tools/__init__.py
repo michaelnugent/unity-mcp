@@ -8,6 +8,7 @@ from .manage_asset import AssetTool
 from .read_console import ConsoleTool
 from .execute_menu_item import MenuItemTool
 from .manage_prefabs import PrefabsTool
+from .introspection_tool import IntrospectionTool
 
 def register_all_tools(mcp):
     """Register all tools with the MCP server."""
@@ -20,4 +21,5 @@ def register_all_tools(mcp):
     ConsoleTool.register_read_console_tools(mcp)
     MenuItemTool.register_execute_menu_item_tools(mcp)
     PrefabsTool.register_manage_prefabs_tools(mcp)
+    IntrospectionTool.register_introspection_tools(mcp)
     print("Unity MCP Server tool registration complete.")

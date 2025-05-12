@@ -7,7 +7,8 @@ from unity_connection import get_unity_connection, ParameterValidationError
 from validation_utils import (
     validate_required_param, validate_param_type,
     validate_serialized_gameobject, validate_serialized_component, 
-    validate_serialized_transform, validate_serialization_status
+    validate_serialized_transform, validate_serialization_status,
+    enhance_error_with_documentation
 )
 
 # Import the new type converters
@@ -68,6 +69,9 @@ class BaseTool:
         
         # Check if action is in required_params
         if action in self.required_params:
+            # Collect all missing required parameters
+            missing_params = []
+            
             # Check for required parameters
             for param_name, param_type in self.required_params[action].items():
                 # Skip checking parameter presence if it's an optional parameter (None)
@@ -81,20 +85,23 @@ class BaseTool:
                         # If using ParameterFormat, check if this is a required parameter
                         required_params = self.parameter_format.get_required_parameters(action)
                         if param_name in required_params:
-                            raise ParameterValidationError(
-                                f"{self.tool_name} '{action}' action requires '{param_name}' parameter"
-                            )
+                            missing_params.append(param_name)
                     else:
                         # Traditional validation
-                        raise ParameterValidationError(
-                            f"{self.tool_name} '{action}' action requires '{param_name}' parameter"
-                        )
+                        missing_params.append(param_name)
                 
                 # Validate parameter type
-                if param_name in converted_params and converted_params[param_name] is not None:
+                elif param_name in converted_params and converted_params[param_name] is not None:
                     validate_param_type(
                         converted_params[param_name], param_name, param_type, action, self.tool_name
                     )
+            
+            # If there are missing parameters, raise error with all of them
+            if missing_params:
+                missing_params_str = "', '".join(missing_params)
+                raise ParameterValidationError(
+                    f"{self.tool_name} '{action}' action requires '{missing_params_str}' parameter"
+                )
         
         # For all parameters, apply type conversions if needed
         for param_name, param_value in list(converted_params.items()):
@@ -172,6 +179,70 @@ class BaseTool:
         """
         pass
     
+    def _handle_command_params(self, command_type: str, params: Dict[str, Any] = None) -> Tuple[Dict[str, Any], bool, str]:
+        """Helper method to handle parameter validation and prepare for command execution.
+        
+        This is an internal method that extracts common code from send_command and can be reused by
+        subclasses that override send_command to implement local handling.
+        
+        Args:
+            command_type: The type of command to send
+            params: The parameters for the command
+            
+        Returns:
+            Tuple containing:
+            - Dict[str, Any]: Converted parameters
+            - bool: Whether this is a validation-only request
+            - str: The action being performed
+            
+        Raises:
+            ParameterValidationError: If parameters fail validation
+        """
+        # Clone params to avoid modifying the original
+        params = params.copy() if params else {}
+        
+        # Extract action if present (preserve original case for validation later)
+        original_action = params.get("action", "")
+        action = original_action.lower() if original_action else ""
+        
+        # Store original action for validation errors
+        if original_action and original_action != action:
+            params["original_action"] = original_action
+        
+        # Update action to lowercase in params
+        if "action" in params:
+            params["action"] = action
+        
+        # Check if this is a validation-only request
+        validate_only = params.get("validateOnly", False)
+        
+        # Validate and convert parameters
+        try:
+            converted_params = self.validate_and_convert_params(action, params)
+            
+            # For validation-only mode, we might return here without sending to Unity
+            if validate_only and not self.needs_unity_validation(action, converted_params):
+                return converted_params, validate_only, action
+            
+            # Use the converted parameters
+            return converted_params, validate_only, action
+            
+        except Exception as e:
+            # Always create enhanced error response for parameter validation errors
+            error_response = enhance_error_with_documentation(
+                str(e),
+                self.tool_name,
+                action=action,
+                parameter_format_class=self.parameter_format
+            )
+            
+            if validate_only:
+                # For validation-only mode, wrap the enhanced response
+                raise ParameterValidationError(error_response)
+            
+            # For non-validation requests, use the enhanced error message
+            raise ParameterValidationError(error_response)
+    
     def send_command(self, command_type: str, params: Dict[str, Any] = None) -> Dict[str, Any]:
         """Send a command to Unity with parameter validation and conversion.
         
@@ -185,20 +256,11 @@ class BaseTool:
         Raises:
             ParameterValidationError: If parameters fail validation
         """
-        # Clone params to avoid modifying the original
-        params = params.copy() if params else {}
-        
-        # Extract action if present
-        action = params.get("action", "").lower() if params.get("action") else ""
-        
-        # Check if this is a validation-only request
-        validate_only = params.get("validateOnly", False)
-        
-        # Validate and convert parameters
         try:
-            converted_params = self.validate_and_convert_params(action, params)
+            # Use the helper method to handle parameters
+            converted_params, validate_only, action = self._handle_command_params(command_type, params)
             
-            # For validation-only mode, we might return here without sending to Unity
+            # If validation only and no Unity validation needed, return success
             if validate_only and not self.needs_unity_validation(action, converted_params):
                 return {
                     "success": True, 
@@ -206,27 +268,22 @@ class BaseTool:
                     "data": {"valid": True}
                 }
             
-            # Use the converted parameters
-            params = converted_params
+            # Send command using the Unity connection
+            response = self.unity_conn.send_command(command_type, converted_params)
             
-        except Exception as e:
-            if validate_only:
-                return {
-                    "success": False,
-                    "message": str(e),
-                    "data": {"valid": False, "reason": str(e)},
-                    "validation_error": True
-                }
-            raise ParameterValidationError(str(e))
-        
-        # Send command using the Unity connection
-        response = self.unity_conn.send_command(command_type, params)
-        
-        # Post-process serialized Unity objects if needed
-        if isinstance(response, dict) and 'data' in response:
-            response = self.post_process_response(response, action, params)
+            # Post-process serialized Unity objects if needed
+            if isinstance(response, dict) and 'data' in response:
+                response = self.post_process_response(response, action, converted_params)
+                
+            return response
             
-        return response
+        except ParameterValidationError as e:
+            # If this is a wrapped error response, unwrap and return it
+            if hasattr(e, 'error_response') and e.error_response:
+                return e.error_response
+            
+            # Otherwise re-raise
+            raise
     
     def post_process_response(self, response: Dict[str, Any], action: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Post-process the response from Unity, especially for serialized objects.

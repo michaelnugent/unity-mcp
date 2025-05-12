@@ -719,4 +719,149 @@ def validate_serialization_status(value: Any, param_name: str) -> None:
         error_message = value.get("message", "Unknown serialization error")
         raise ParameterValidationError(
             f"Invalid {param_name} value: Serialization failed - {error_message}"
-        ) 
+        )
+
+def generate_parameter_help_response(
+    tool_name: str, 
+    param_name: Optional[str] = None, 
+    action: Optional[str] = None,
+    parameter_format_class: Optional[Type] = None
+) -> Dict[str, Any]:
+    """Generate a formatted help response with parameter documentation.
+    
+    This function creates a structured response containing parameter documentation
+    to help users understand the expected formats and requirements. It can be used
+    both as a standalone help feature and to enhance error messages.
+    
+    Args:
+        tool_name: Name of the tool
+        param_name: Optional name of the specific parameter to document
+        action: Optional action context for the parameter
+        parameter_format_class: Optional ParameterFormat class to use for documentation
+        
+    Returns:
+        Dict containing formatted documentation
+    """
+    result = {
+        "tool": tool_name,
+        "action": action,
+        "documentation": {}
+    }
+    
+    # If no parameter format class was provided, just return basic info
+    if not parameter_format_class:
+        return result
+    
+    # If a specific parameter was requested
+    if param_name:
+        param_def = parameter_format_class.get_parameter_definition(param_name)
+        if param_def:
+            result["documentation"] = {
+                "parameter": param_name,
+                "description": param_def.get("description", ""),
+                "type": str(param_def.get("type", "unknown")),
+                "examples": param_def.get("examples", []),
+                "validation_rules": param_def.get("validation_rules", [])
+            }
+            
+            # Add information about whether this parameter is required for the given action
+            if action:
+                required_params = parameter_format_class.get_required_parameters(action)
+                result["documentation"]["required_for_action"] = param_name in required_params
+        else:
+            result["documentation"] = {
+                "parameter": param_name,
+                "error": f"No documentation found for parameter '{param_name}'"
+            }
+    
+    # If documentation for an action was requested
+    elif action:
+        # Get required parameters for the action
+        required_params = parameter_format_class.get_required_parameters(action)
+        
+        # Get valid actions to check if the requested action is valid
+        valid_actions = parameter_format_class.get_valid_actions()
+        action_valid = action in valid_actions
+        
+        result["documentation"] = {
+            "action": action,
+            "valid_action": action_valid,
+            "required_parameters": [],
+            "optional_parameters": []
+        }
+        
+        # If the action is valid, document its parameters
+        if action_valid:
+            # Add documentation for each required parameter
+            for req_param in required_params:
+                param_def = parameter_format_class.get_parameter_definition(req_param)
+                if param_def:
+                    result["documentation"]["required_parameters"].append({
+                        "name": req_param,
+                        "description": param_def.get("description", ""),
+                        "type": str(param_def.get("type", "unknown")),
+                        "examples": param_def.get("examples", [])
+                    })
+    
+    # If no specific parameter or action was requested, list all valid actions
+    else:
+        valid_actions = parameter_format_class.get_valid_actions()
+        result["documentation"] = {
+            "valid_actions": valid_actions,
+            "common_parameters": list(parameter_format_class.COMMON_PARAMETERS.keys())
+        }
+        
+        # If there's a tool-specific PARAMETERS dict, include those parameters
+        if hasattr(parameter_format_class, 'PARAMETERS'):
+            result["documentation"]["tool_parameters"] = list(parameter_format_class.PARAMETERS.keys())
+    
+    return result
+
+def enhance_error_with_documentation(
+    error_message: str,
+    tool_name: str,
+    param_name: Optional[str] = None,
+    action: Optional[str] = None,
+    parameter_format_class: Optional[Type] = None
+) -> Dict[str, Any]:
+    """Enhance an error message with parameter documentation.
+    
+    This function takes an error message and enriches it with parameter documentation
+    to help users understand how to fix the issue.
+    
+    Args:
+        error_message: The original error message
+        tool_name: Name of the tool
+        param_name: Optional name of the parameter that caused the error
+        action: Optional action context for the error
+        parameter_format_class: Optional ParameterFormat class to use for documentation
+        
+    Returns:
+        Dict containing the enhanced error response
+    """
+    response = {
+        "success": False,
+        "message": error_message,
+        "validation_error": True,
+    }
+    
+    # If we have a parameter format class, add documentation
+    if parameter_format_class:
+        # Generate parameter help
+        help_info = generate_parameter_help_response(
+            tool_name, param_name, action, parameter_format_class
+        )
+        
+        # Add documentation to the error response
+        response["help"] = help_info
+        
+        # If we have a specific parameter with examples, add a suggestions section
+        if param_name and "documentation" in help_info and "examples" in help_info["documentation"]:
+            examples = help_info["documentation"]["examples"]
+            if examples:
+                response["suggestions"] = {
+                    "example_format": examples[0] if examples else None,
+                    "valid_format": help_info["documentation"].get("validation_rules", [])
+                }
+    
+    return response 

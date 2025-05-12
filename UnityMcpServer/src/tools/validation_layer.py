@@ -56,23 +56,32 @@ def validate_asset_path(path: Any, must_exist: bool = False, extension: Optional
     if extension and not path.endswith(extension):
         raise ParameterValidationError(f"Asset path must end with '{extension}', got: {path}")
 
-def validate_gameobject_path(path: Any, must_exist: bool = False) -> None:
+def validate_gameobject_path(path: Any, parameter_name: str = "path") -> None:
     """Validate a GameObject path parameter.
     
     Args:
         path: The path value to validate
-        must_exist: Whether the GameObject must exist (cannot be validated client-side, only format check)
+        parameter_name: Name of the parameter being validated (for error messages)
         
     Raises:
         ParameterValidationError: If validation fails
+        
+    Returns:
+        None: The function doesn't return a value but raises exceptions for invalid paths
     """
     # Check type
     if not isinstance(path, str):
-        raise ParameterValidationError(f"GameObject path must be a string, got {type(path).__name__}: {path}")
+        raise ParameterValidationError(f"Parameter '{parameter_name}' must be a string, got {type(path).__name__}: {path}")
     
     # Check for empty path
     if not path:
-        raise ParameterValidationError("GameObject path cannot be empty")
+        raise ParameterValidationError(f"Parameter '{parameter_name}' cannot be empty")
+        
+    # Check for valid path format (should not contain invalid characters like \ or ")
+    invalid_chars = ['\\', '"', '*', '<', '>', '|', ':', '?']
+    for char in invalid_chars:
+        if char in path:
+            raise ParameterValidationError(f"Parameter '{parameter_name}' contains invalid character '{char}': {path}")
 
 def validate_component_type(component_type: Any) -> None:
     """Validate a component type parameter.
@@ -166,9 +175,23 @@ def validate_action(action: Any, valid_actions: List[str]) -> None:
     if not isinstance(action, str):
         raise ParameterValidationError(f"Action must be a string, got {type(action).__name__}: {action}")
     
-    # Check if action is in valid_actions list
-    if action not in valid_actions:
-        raise ParameterValidationError(f"Action must be one of: {', '.join(valid_actions)}, got: {action}")
+    # First, check if the action is directly valid (exact case match)
+    if action in valid_actions:
+        return
+        
+    # If not, check for case-insensitive match to suggest proper casing
+    action_lower = action.lower()
+    valid_actions_lower = [valid.lower() for valid in valid_actions]
+    
+    if action_lower in valid_actions_lower:
+        # Find the correct casing
+        index = valid_actions_lower.index(action_lower)
+        correct_action = valid_actions[index]
+        suggestion = f", did you mean '{correct_action}'?"
+        raise ParameterValidationError(f"Action '{action}' has incorrect capitalization{suggestion}. Valid actions are: {', '.join(valid_actions)}")
+    else:
+        # No match found, provide the full list of valid actions
+        raise ParameterValidationError(f"Action '{action}' is not valid. Action must be one of: {', '.join(valid_actions)}. Available actions are: {', '.join(valid_actions)}, got: {action}")
 
 def validate_parameters_by_action(action: str, params: Dict[str, Any], action_param_map: Dict[str, List[str]]) -> None:
     """Validate that all required parameters for an action are present.

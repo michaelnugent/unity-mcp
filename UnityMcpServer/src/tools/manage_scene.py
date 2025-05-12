@@ -9,13 +9,23 @@ from exceptions import ParameterValidationError
 # Import the validation layer functions
 from .validation_layer import (
     validate_asset_path, validate_gameobject_path, 
-    validate_component_type, validate_screenshot_path
+    validate_component_type, validate_screenshot_path,
+    validate_action
 )
 
 class SceneTool(BaseTool):
     """Tool for managing Unity scenes."""
     
     tool_name = "manage_scene"
+    
+    # Define valid actions
+    VALID_ACTIONS = [
+        'open', 'create', 'save', 'save_as', 'add_to_build', 'get_scene_info', 
+        'get_open_scenes', 'close', 'instantiate', 'delete', 'move', 'rotate', 
+        'scale', 'find', 'get_component', 'set_component', 'add_component', 
+        'remove_component', 'get_position', 'get_rotation', 'get_scale', 
+        'set_parent', 'set_active', 'capture_screenshot'
+    ]
     
     # Define required parameters for each action
     required_params = {
@@ -43,6 +53,9 @@ class SceneTool(BaseTool):
     
     def additional_validation(self, action: str, params: Dict[str, Any]) -> None:
         """Additional validation specific to the scene tool."""
+        # Validate action is supported
+        validate_action(action, self.VALID_ACTIONS)
+        
         # Validate paths for scene files
         if action in ["open", "save_as", "add_to_build"] and "path" in params:
             validate_asset_path(
@@ -63,12 +76,12 @@ class SceneTool(BaseTool):
         if "game_object_name" in params and params.get("game_object_name"):
             validate_gameobject_path(
                 params["game_object_name"],
-                must_exist=(action not in ["instantiate"])
+                parameter_name="game_object_name"
             )
         
         # Validate parent name if provided
         if "parent_name" in params and params.get("parent_name"):
-            validate_gameobject_path(params["parent_name"], must_exist=True)
+            validate_gameobject_path(params["parent_name"], parameter_name="parent_name")
         
         # Validate component type
         if "component_type" in params and params.get("component_type"):
@@ -298,33 +311,6 @@ def validate_component_type(component_type: Any) -> None:
     # Validate component type format (should be like UnityEngine.Transform or FullNamespace.ComponentName)
     if not ("." in component_type and component_type.split(".")[-1] and component_type.split(".")[0]):
         raise ParameterValidationError(f"Component type must be in format 'Namespace.ComponentName', got: {component_type}")
-
-def validate_gameobject_path(path: Any, must_exist: bool = False) -> None:
-    """Validate a GameObject path parameter.
-
-    Args:
-        path: The path value to validate
-        must_exist: Whether the GameObject must exist (cannot be validated client-side, only format check)
-    
-    Returns:
-        None: This function doesn't return anything but raises exceptions on validation failure
-    
-    Raises:
-        ParameterValidationError: If validation fails
-    """
-    # Check type
-    if not isinstance(path, str):
-        raise ParameterValidationError(f"GameObject path must be a string, got {type(path).__name__}: {path}")
-    
-    # Check for empty path
-    if not path:
-        raise ParameterValidationError("GameObject path cannot be empty")
-    
-    # Check for valid path format (should not contain invalid characters like \ or ")
-    invalid_chars = ['\\', '"', '*', '<', '>', '|', ':', '?']
-    for char in invalid_chars:
-        if char in path:
-            raise ParameterValidationError(f"GameObject path contains invalid character '{char}': {path}")
 
 def validate_screenshot_path(path: Any) -> None:
     """Validate a screenshot save path parameter.

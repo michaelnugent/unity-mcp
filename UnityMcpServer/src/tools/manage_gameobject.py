@@ -4,6 +4,13 @@ Defines tools for managing GameObjects within Unity scenes through the MCP serve
 This module provides functionality for creating, modifying, and manipulating GameObjects
 in Unity scenes, including standard operations like instantiation, destruction,
 and property modification.
+
+For detailed parameter descriptions, examples and validation rules, see the 
+GameObjectFormat class definition.
+
+This format definition is used internally by the GameObjectTool class to provide
+consistent parameter validation, documentation, and examples. The MCP tool function
+includes these descriptions directly for accessibility through the MCP system.
 """
 import asyncio
 from typing import Dict, Any, Optional, List, Union, Literal, TypedDict
@@ -193,26 +200,6 @@ class GameObjectTool(BaseTool):
     tool_name = "manage_gameobject"
     parameter_format = GameObjectFormat
     
-    # Define required parameters for each action
-    required_params = {
-        "create": {"name": str},
-        "modify": {"target": str},
-        "delete": {"target": str},
-        "find": {"search_term": str},
-        "get_children": {"target": str},
-        "get_components": {"target": str},
-        "add_component": {"target": str, "components_to_add": list},
-        "remove_component": {"target": str, "components_to_remove": list},
-        "set_component_property": {"target": str, "component_properties": dict},
-        "set_active": {"target": str, "set_active": bool},
-        "set_position": {"target": str, "position": list},
-        "set_rotation": {"target": str, "rotation": list},
-        "set_scale": {"target": str, "scale": list},
-        "set_parent": {"target": str, "parent": str},
-        "instantiate": {"prefab_path": str},
-        "duplicate": {"target": str},
-    }
-    
     # Define parameters that should be validated as Vector3
     vector3_params = ["position", "scale"]
     
@@ -266,21 +253,25 @@ class GameObjectTool(BaseTool):
                         "Cannot create default prefab path: 'name' parameter is missing"
                     )
                     
-            # Use validation_parameters_by_action to ensure all required parameters are present
-            validate_parameters_by_action(action, params, self.parameter_format.REQUIRED_PARAMETERS)
+            # Use parameter_format to get required parameters for the action
+            required_params = self.parameter_format.get_required_parameters(action)
+            # Validate all required parameters are present
+            for param_name in required_params:
+                if param_name not in params:
+                    raise ParameterValidationError(
+                        f"{self.tool_name} '{action}' action requires '{param_name}' parameter"
+                    )
             
             # Validate primitive type if specified
             if params.get("primitive_type") and params["primitive_type"] not in self._valid_primitive_types:
                 raise ParameterValidationError(
-                    f"Invalid primitive type: {params['primitive_type']}. "
-                    f"Must be one of: {', '.join(self._valid_primitive_types)}"
+                    f"Parameter 'primitive_type' is invalid: {params['primitive_type']}. Valid types are: {', '.join(self._valid_primitive_types)}"
                 )
                 
             # Validate search method if specified
             if params.get("search_method") and params["search_method"] not in self._valid_search_methods:
                 raise ParameterValidationError(
-                    f"Invalid search method: {params['search_method']}. "
-                    f"Must be one of: {', '.join(self._valid_search_methods)}"
+                    f"Parameter 'search_method' is invalid: {params['search_method']}. Valid methods are: {', '.join(self._valid_search_methods)}"
                 )
                 
             # Validate component types in components_to_add and components_to_remove
@@ -296,24 +287,40 @@ class GameObjectTool(BaseTool):
             if "component_properties" in params:
                 comp_props = params["component_properties"]
                 if not isinstance(comp_props, dict):
+                    # Get example from parameter format for better error messages
+                    example = ""
+                    if self.parameter_format:
+                        param_examples = self.parameter_format.get_parameter_examples("component_properties")
+                        if param_examples and len(param_examples) > 0:
+                            import json
+                            example = f" Example: {json.dumps(param_examples[0], indent=2)}"
+                    
                     raise ParameterValidationError(
-                        "component_properties must be a dictionary mapping component names to property dictionaries"
+                        f"Parameter 'component_properties' must be of type dict, mapping component names to property dictionaries.{example}"
                     )
                 
-                for comp_name, props in comp_props.items():
-                    validate_component_type(comp_name)
-                    if not isinstance(props, dict):
-                        raise ParameterValidationError(
-                            f"Properties for component '{comp_name}' must be a dictionary"
-                        )
-                        
+                # If component_name is provided separately, the component_properties can be direct property values
+                # instead of being nested under the component name
+                if "component_name" in params and params["component_name"]:
+                    # In this case, component_properties contains direct property values for the specified component
+                    # No need to validate the structure further, Unity will validate the actual properties
+                    pass
+                else:
+                    # If no component_name is provided, then component_properties should map component names to property dicts
+                    for comp_name, props in comp_props.items():
+                        validate_component_type(comp_name)
+                        if not isinstance(props, dict):
+                            raise ParameterValidationError(
+                                f"Properties for component '{comp_name}' must be a dictionary"
+                            )
+            
             # Validate GameObject references
             if "target" in params:
-                validate_gameobject_path(params["target"])
+                validate_gameobject_path(params["target"], parameter_name="target")
                 
             if "parent" in params:
-                validate_gameobject_path(params["parent"])
-                
+                validate_gameobject_path(params["parent"], parameter_name="parent")
+            
         except ParameterValidationError:
             # Re-raise validation errors
             raise
@@ -769,30 +776,3 @@ def validate_component_type(component_type: Any) -> None:
     # Validate component type format (should be like UnityEngine.Transform or FullNamespace.ComponentName)
     if not (component_type.split(".")[-1] and component_type.split(".")[0]):
         raise ParameterValidationError(f"Component type must be in format 'Namespace.ComponentName', got: {component_type}")
-
-def validate_gameobject_path(path: Any, must_exist: bool = False) -> None:
-    """Validate a GameObject path parameter.
-
-    Args:
-        path: The path value to validate
-        must_exist: Whether the GameObject must exist (cannot be validated client-side, only format check)
-    
-    Returns:
-        None: This function doesn't return anything but raises exceptions on validation failure
-    
-    Raises:
-        ParameterValidationError: If validation fails
-    """
-    # Check type
-    if not isinstance(path, str):
-        raise ParameterValidationError(f"GameObject path must be a string, got {type(path).__name__}: {path}")
-    
-    # Check for empty path
-    if not path:
-        raise ParameterValidationError("GameObject path cannot be empty")
-    
-    # Check for valid path format (should not contain invalid characters like \ or ")
-    invalid_chars = ['\\', '"', '*', '<', '>', '|', ':', '?']
-    for char in invalid_chars:
-        if char in path:
-            raise ParameterValidationError(f"GameObject path contains invalid character '{char}': {path}") 

@@ -2,6 +2,7 @@ import socket
 import json
 import logging
 import sys
+import time
 from dataclasses import dataclass
 from typing import Dict, Any, Optional, List, Tuple, Union
 from config import config
@@ -17,9 +18,9 @@ logging.basicConfig(
 logger = logging.getLogger("unity-mcp-server")
 
 # Maximum number of retries for sending commands
-MAX_RETRIES = 3
+MAX_RETRIES = config.max_retries
 # Time to wait between retries
-RETRY_WAIT = 0.5
+RETRY_WAIT = config.retry_delay
 
 @dataclass
 class UnityConnection:
@@ -131,73 +132,134 @@ class UnityConnection:
             raise
 
     def send_command(self, command_type: str, params: Dict[str, Any] = None) -> Dict[str, Any]:
-        """Send a command to Unity and return its response."""
-        if not self.sock and not self.connect():
-            raise ConnectionError("Not connected to Unity")
+        """Send a command to Unity and return its response.
         
+        This method includes retry logic with exponential backoff to handle
+        temporary connection issues with Unity.
+        
+        Args:
+            command_type: The type of command to send
+            params: The parameters for the command
+            
+        Returns:
+            The response from Unity
+            
+        Raises:
+            ConnectionError: If unable to connect to Unity after retries
+            UnityCommandError: If Unity returns an error
+        """
         # Make sure params is at least an empty dict
         params = params or {}
         
-        # Special handling for ping command
-        if command_type == "ping":
-            try:
-                logger.debug("Sending ping to verify connection")
-                self.sock.sendall(b"ping")
-                response_data = self.receive_full_response(self.sock)
-                response = json.loads(response_data.decode('utf-8'))
-                
-                if response.get("status") != "success":
-                    logger.warning("Ping response was not successful")
-                    self.sock = None
-                    raise ConnectionError("Connection verification failed")
-                    
-                return {"message": "pong"}
-            except Exception as e:
-                logger.error(f"Ping error: {str(e)}")
-                self.sock = None
-                raise ConnectionError(f"Connection verification failed: {str(e)}")
+        retry_count = 0
+        last_exception = None
+        retry_delay = RETRY_WAIT
         
-        # Normal command handling
-        command = {"type": command_type, "params": params}
-        try:
-            # Check for very large content that might cause JSON issues
-            command_size = len(json.dumps(command))
-            
-            if command_size > config.buffer_size / 2:
-                logger.warning(f"Large command detected ({command_size} bytes). This might cause issues.")
-                
-            logger.info(f"Sending command: {command_type} with params size: {command_size} bytes")
-            
-            # Ensure we have a valid JSON string before sending
-            command_json = json.dumps(command, ensure_ascii=False)
-            self.sock.sendall(command_json.encode('utf-8'))
-            
-            response_data = self.receive_full_response(self.sock)
+        while retry_count <= MAX_RETRIES:
             try:
-                response = json.loads(response_data.decode('utf-8'))
-            except json.JSONDecodeError as je:
-                logger.error(f"JSON decode error: {str(je)}")
-                # Log partial response for debugging
-                partial_response = response_data.decode('utf-8')[:500] + "..." if len(response_data) > 500 else response_data.decode('utf-8')
-                logger.error(f"Partial response: {partial_response}")
-                raise UnityCommandError(f"Invalid JSON response from Unity: {str(je)}")
+                # Make sure we're connected
+                if not self.sock and not self.connect():
+                    raise ConnectionError("Not connected to Unity")
+                
+                # Special handling for ping command
+                if command_type == "ping":
+                    logger.debug("Sending ping to verify connection")
+                    self.sock.sendall(b"ping")
+                    response_data = self.receive_full_response(self.sock)
+                    response = json.loads(response_data.decode('utf-8'))
+                    
+                    if response.get("status") != "success":
+                        logger.warning("Ping response was not successful")
+                        self.sock = None
+                        raise ConnectionError("Connection verification failed")
+                        
+                    return {"message": "pong"}
+                
+                # Normal command handling
+                command = {"type": command_type, "params": params}
+                
+                # Check for very large content that might cause JSON issues
+                command_size = len(json.dumps(command))
+                
+                if command_size > config.buffer_size / 2:
+                    logger.warning(f"Large command detected ({command_size} bytes). This might cause issues.")
+                    
+                logger.info(f"Sending command: {command_type} with params size: {command_size} bytes")
+                
+                # Ensure we have a valid JSON string before sending
+                command_json = json.dumps(command, ensure_ascii=False)
+                self.sock.sendall(command_json.encode('utf-8'))
+                
+                response_data = self.receive_full_response(self.sock)
+                try:
+                    response = json.loads(response_data.decode('utf-8'))
+                except json.JSONDecodeError as je:
+                    logger.error(f"JSON decode error: {str(je)}")
+                    # Log partial response for debugging
+                    partial_response = response_data.decode('utf-8')[:500] + "..." if len(response_data) > 500 else response_data.decode('utf-8')
+                    logger.error(f"Partial response: {partial_response}")
+                    raise UnityCommandError(f"Invalid JSON response from Unity: {str(je)}")
+                
+                if response.get("status") == "error":
+                    error_message = response.get("error") or response.get("message", "Unknown Unity error")
+                    logger.error(f"Unity error: {error_message}")
+                    raise UnityCommandError(error_message)
+                
+                # Success! Return the result
+                return response.get("result", {})
             
-            if response.get("status") == "error":
-                error_message = response.get("error") or response.get("message", "Unknown Unity error")
-                logger.error(f"Unity error: {error_message}")
-                raise UnityCommandError(error_message)
-            
-            return response.get("result", {})
-        except ConnectionError:
-            # Re-raise connection errors without wrapping
-            raise
-        except UnityCommandError:
-            # Re-raise command errors without wrapping
-            raise
-        except Exception as e:
-            logger.error(f"Communication error with Unity: {str(e)}")
-            self.sock = None
-            raise ConnectionError(f"Failed to communicate with Unity: {str(e)}")
+            except UnityCommandError:
+                # Don't retry for command errors (these are expected to fail consistently)
+                raise
+                
+            except (ConnectionError, socket.error) as e:
+                last_exception = e
+                self.sock = None
+                
+                if retry_count < MAX_RETRIES:
+                    retry_count += 1
+                    logger.warning(f"Connection to Unity failed. Retry {retry_count}/{MAX_RETRIES} in {retry_delay:.2f}s: {str(e)}")
+                    
+                    # Sleep with exponential backoff
+                    time.sleep(retry_delay)
+                    retry_delay *= 2  # Exponential backoff
+                    
+                    # Try to reconnect before next retry
+                    try:
+                        logger.info("Attempting to reconnect to Unity...")
+                        self.reconnect()
+                    except Exception as reconnect_error:
+                        logger.warning(f"Reconnection attempt failed: {str(reconnect_error)}")
+                else:
+                    # We've reached max retries
+                    logger.error(f"Failed to communicate with Unity after {MAX_RETRIES} retries: {str(e)}")
+                    raise ConnectionError(f"Failed to communicate with Unity after {MAX_RETRIES} retries: {str(last_exception)}")
+                    
+            except Exception as e:
+                last_exception = e
+                self.sock = None
+                
+                if retry_count < MAX_RETRIES:
+                    retry_count += 1
+                    logger.warning(f"Communication error with Unity. Retry {retry_count}/{MAX_RETRIES} in {retry_delay:.2f}s: {str(e)}")
+                    
+                    # Sleep with exponential backoff
+                    time.sleep(retry_delay)
+                    retry_delay *= 2  # Exponential backoff
+                    
+                    # Try to reconnect before next retry
+                    try:
+                        logger.info("Attempting to reconnect to Unity...")
+                        self.reconnect()
+                    except Exception as reconnect_error:
+                        logger.warning(f"Reconnection attempt failed: {str(reconnect_error)}")
+                else:
+                    # We've reached max retries
+                    logger.error(f"Communication error with Unity after {MAX_RETRIES} retries: {str(e)}")
+                    raise ConnectionError(f"Failed to communicate with Unity after {MAX_RETRIES} retries: {str(last_exception)}")
+        
+        # This should never be reached due to the raises above, but just in case
+        raise ConnectionError(f"Failed to communicate with Unity: Maximum retries exceeded")
 
     def reconnect(self):
         """Reestablish the connection to Unity if it was lost.
@@ -229,13 +291,22 @@ _unity_connection = None
 def get_unity_connection() -> UnityConnection:
     """Retrieve or establish a persistent Unity connection.
     
+    This function will try to reconnect to Unity with exponential backoff
+    if the initial connection fails. It will make up to config.max_retries attempts
+    before giving up.
+    
     Args:
         None: This function takes no parameters
         
     Returns:
         UnityConnection: A connected UnityConnection instance ready for use
+        
+    Raises:
+        ConnectionError: If unable to connect to Unity after retries
     """
     global _unity_connection
+    
+    # Try to use existing connection
     if _unity_connection is not None:
         try:
             # Try to ping with a short timeout to verify connection
@@ -251,23 +322,46 @@ def get_unity_connection() -> UnityConnection:
                 pass
             _unity_connection = None
     
-    # Create a new connection
-    logger.info("Creating new Unity connection")
-    _unity_connection = UnityConnection(host=config.unity_host, port=config.unity_port)
-    if not _unity_connection.connect():
-        _unity_connection = None
-        raise ConnectionError("Could not connect to Unity. Ensure the Unity Editor and MCP Bridge are running.")
+    # Create a new connection with retries
+    retry_count = 0
+    last_exception = None
+    retry_delay = config.retry_delay
     
-    try:
-        # Verify the new connection works
-        _unity_connection.send_command("ping")
-        logger.info("Successfully established new Unity connection")
-        return _unity_connection
-    except Exception as e:
-        logger.error(f"Could not verify new connection: {str(e)}")
+    while retry_count <= config.max_retries:
         try:
-            _unity_connection.disconnect()
-        except:
-            pass
-        _unity_connection = None
-        raise ConnectionError(f"Could not establish valid Unity connection: {str(e)}")
+            logger.info(f"Creating new Unity connection (attempt {retry_count + 1}/{config.max_retries + 1})")
+            _unity_connection = UnityConnection(host=config.unity_host, port=config.unity_port)
+            
+            if not _unity_connection.connect():
+                raise ConnectionError(f"Failed to connect to Unity at {config.unity_host}:{config.unity_port}")
+            
+            # Verify the new connection works
+            _unity_connection.send_command("ping")
+            logger.info("Successfully established new Unity connection")
+            return _unity_connection
+            
+        except Exception as e:
+            last_exception = e
+            
+            # Clean up any failed connection
+            if _unity_connection:
+                try:
+                    _unity_connection.disconnect()
+                except:
+                    pass
+                _unity_connection = None
+            
+            if retry_count < config.max_retries:
+                retry_count += 1
+                logger.warning(f"Connection to Unity failed. Retry {retry_count}/{config.max_retries} in {retry_delay:.2f}s: {str(e)}")
+                
+                # Sleep with exponential backoff
+                time.sleep(retry_delay)
+                retry_delay *= 2  # Exponential backoff
+            else:
+                # We've reached max retries
+                logger.error(f"Could not establish Unity connection after {config.max_retries} retries: {str(e)}")
+                raise ConnectionError(f"Could not establish valid Unity connection after {config.max_retries} retries: {str(last_exception)}")
+    
+    # This should never be reached due to the raises above, but just in case
+    raise ConnectionError("Could not establish Unity connection: Maximum retries exceeded")

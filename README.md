@@ -288,13 +288,14 @@ Help make Unity MCP better!
 
 </details>  
 
-Still stuck? [Open an Issue](https://www.google.com/url?sa=E&q=https%3A%2F%2Fgithub.com%2Fmichaelnugent%2Funity-mcp%2Fissues).
+Still stuck? [Open an Issue](https://github.com/michaelnugent/unity-mcp/issues).
+
 
 ---
 
 ## License 📜
 
-MIT License. See [LICENSE](https://www.google.com/url?sa=E&q=https%3A%2F%2Fgithub.com%2Fmichaelnugent%2Funity-mcp%2Fblob%2Fmaster%2FLICENSE) file.
+MIT License. See [LICENSE](https://github.com/michaelnugent/unity-mcp/blob/master/LICENSE) file.
 
 ---
 

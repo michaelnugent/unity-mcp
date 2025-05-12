@@ -5,7 +5,7 @@ import os
 import base64
 from exceptions import ParameterValidationError
 # Import the validation layer functions
-from .validation_layer import validate_script_code, validate_asset_path
+from .validation_layer import validate_script_code, validate_asset_path, validate_action
 
 class ScriptTool(BaseTool):
     """Tool for managing Unity scripts."""
@@ -31,15 +31,22 @@ class ScriptTool(BaseTool):
     
     def additional_validation(self, action: str, params: Dict[str, Any]) -> None:
         """Additional validation specific to the script tool."""
+        # Validate action is supported
+        valid_actions = ["create", "read", "update", "delete"]
+        validate_action(action, valid_actions)
+        
         if action in ["create", "update"]:
-            # Check for contents or encodedContents
-            if not params.get("contents") and not params.get("encodedContents"):
+            # Validate that contents is present
+            if "contents" not in params or params["contents"] is None:
                 raise ParameterValidationError(
                     f"{self.tool_name} '{action}' action requires 'contents' parameter"
                 )
             
-            # Validate script contents if provided directly (not encoded)
-            if params.get("contents") and params.get("scriptType"):
+            # Check if contents is marked as encoded and validate if needed
+            is_encoded = params.get("contents_encoded", False)
+            
+            # Validate script contents if not encoded
+            if not is_encoded and params.get("scriptType"):
                 validate_script_code(
                     params["contents"], 
                     params.get("scriptType", "MonoBehaviour")
@@ -71,7 +78,8 @@ class ScriptTool(BaseTool):
             path: str,
             contents: str,
             script_type: str,
-            namespace: str
+            namespace: str,
+            contents_encoded: bool = False
         ) -> Dict[str, Any]:
             """Manages C# scripts in Unity (create, read, update, delete).
             Make reference variables public for easier access in the Unity Editor.
@@ -80,9 +88,10 @@ class ScriptTool(BaseTool):
                 action: Operation ('create', 'read', 'update', 'delete').
                 name: Script name (no .cs extension).
                 path: Asset path (default: "Assets/").
-                contents: C# code for 'create'/'update'.
+                contents: C# code for 'create'/'update'. Can be plain text or base64 encoded.
                 script_type: Type hint (e.g., 'MonoBehaviour').
                 namespace: Script namespace.
+                contents_encoded: Whether the contents parameter is already base64 encoded.
 
             Returns:
                 Dictionary with results ('success', 'message', 'data').
@@ -100,13 +109,19 @@ class ScriptTool(BaseTool):
                     "script_type": script_type
                 }
                 
-                # Base64 encode the contents if they exist to avoid JSON escaping issues
+                # Handle contents based on encoding flag
                 if contents is not None:
                     if action in ['create', 'update']:
-                        # Encode content for safer transmission
-                        params["encoded_contents"] = base64.b64encode(contents.encode('utf-8')).decode('utf-8')
-                        params["contents_encoded"] = True
+                        if contents_encoded:
+                            # Content is already encoded, just pass it through
+                            params["contents"] = contents
+                            params["contents_encoded"] = True
+                        else:
+                            # Encode content for safer transmission
+                            params["contents"] = base64.b64encode(contents.encode('utf-8')).decode('utf-8')
+                            params["contents_encoded"] = True
                     else:
+                        # For non-create/update actions, pass contents as-is
                         params["contents"] = contents
                 
                 # Remove None values so they don't get sent as null
@@ -117,11 +132,10 @@ class ScriptTool(BaseTool):
                 
                 # Process response from Unity
                 if response.get("success"):
-                    # If the response contains base64 encoded content, decode it
+                    # If the response contains encoded content, decode it
                     if response.get("data", {}).get("contents_encoded"):
-                        decoded_contents = base64.b64decode(response["data"]["encoded_contents"]).decode('utf-8')
+                        decoded_contents = base64.b64decode(response["data"]["contents"]).decode('utf-8')
                         response["data"]["contents"] = decoded_contents
-                        del response["data"]["encoded_contents"]
                         del response["data"]["contents_encoded"]
                     
                     return {"success": True, "message": response.get("message", "Operation successful."), "data": response.get("data")}

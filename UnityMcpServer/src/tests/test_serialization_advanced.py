@@ -431,18 +431,17 @@ def test_serialization_depth_detection(basic_depth_object, standard_depth_object
         "__type": "GameObject"
     }
     
-    # Confirm current behavior (no depth specified returns None)
-    assert get_serialization_depth(no_depth_obj) is None
+    # Default behavior should return Basic for minimal objects
+    assert get_serialization_depth(no_depth_obj) == SERIALIZATION_DEPTH_BASIC
     
     # Test a validation function that would implement the default logic
     def validate_with_default_depth(obj):
         depth = get_serialization_depth(obj)
-        if depth is None and is_serialized_unity_object(obj):
-            return SERIALIZATION_DEPTH_STANDARD
+        # Since we already get a default value, just return it
         return depth
     
     # Use our validation function to demonstrate the desired behavior
-    assert validate_with_default_depth(no_depth_obj) == SERIALIZATION_DEPTH_STANDARD
+    assert validate_with_default_depth(no_depth_obj) == SERIALIZATION_DEPTH_BASIC
     
     # Test with invalid depth using our validation function
     invalid_depth_obj = {

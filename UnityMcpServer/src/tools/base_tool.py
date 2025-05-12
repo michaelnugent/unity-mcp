@@ -20,6 +20,7 @@ from type_converters import (
 
 # Import serialization utilities
 import serialization_utils
+import copy
 
 class BaseTool:
     """Base class for all Unity MCP tools with shared validation logic."""
@@ -27,6 +28,7 @@ class BaseTool:
     # Class-level attributes to be overridden by subclasses
     tool_name: str = None
     required_params: Dict[str, Dict[str, Type]] = {}
+    parameter_format = None  # Subclasses can set this to their ParameterFormat class
     
     # Parameter types requiring conversion
     vector2_params: List[str] = []
@@ -49,132 +51,96 @@ class BaseTool:
         self.unity_conn = getattr(self, 'unity_conn', get_unity_connection())
     
     def validate_and_convert_params(self, action: str, params: Dict[str, Any]) -> Dict[str, Any]:
-        """Validate and convert parameters before sending to Unity.
+        """Validate and convert parameters based on parameter type requirements.
         
         Args:
             action: The current action being performed
-            params: Parameters to validate and convert
+            params: Parameters to validate
             
         Returns:
-            Dict with validated and converted parameters
+            Dict[str, Any]: Converted parameters
             
         Raises:
             ParameterValidationError: If validation fails
         """
-        # Make a copy of params to avoid modifying the original
-        converted_params = params.copy() if params else {}
+        # Make a copy of the parameters to avoid modifying the original
+        converted_params = copy.deepcopy(params) if params is not None else {}
         
-        # Check required parameters based on action
-        action_required = self.required_params.get(action, {})
-        for param_name, param_type in action_required.items():
-            try:
-                if param_name not in params:
-                    raise ParameterValidationError(f"{self.tool_name} '{action}' action requires '{param_name}' parameter")
-                if params[param_name] is not None:  # Allow None values for optional params
-                    validate_param_type(params[param_name], param_name, param_type, action, self.tool_name)
-            except ParameterValidationError as e:
-                # Re-raise with the original error message to preserve parameter information
-                raise ParameterValidationError(str(e))
+        # Check if action is in required_params
+        if action in self.required_params:
+            # Check for required parameters
+            for param_name, param_type in self.required_params[action].items():
+                # Skip checking parameter presence if it's an optional parameter (None)
+                if param_type is None:
+                    continue
+                    
+                # Check if required parameter is present
+                if param_name not in converted_params:
+                    # Support for ParameterFormat validation
+                    if self.parameter_format:
+                        # If using ParameterFormat, check if this is a required parameter
+                        required_params = self.parameter_format.get_required_parameters(action)
+                        if param_name in required_params:
+                            raise ParameterValidationError(
+                                f"{self.tool_name} '{action}' action requires '{param_name}' parameter"
+                            )
+                    else:
+                        # Traditional validation
+                        raise ParameterValidationError(
+                            f"{self.tool_name} '{action}' action requires '{param_name}' parameter"
+                        )
+                
+                # Validate parameter type
+                if param_name in converted_params and converted_params[param_name] is not None:
+                    validate_param_type(
+                        converted_params[param_name], param_name, param_type, action, self.tool_name
+                    )
         
-        # Convert Vector2 parameters
-        for param_name in self.vector2_params:
-            if param_name in params and params[param_name] is not None:
-                try:
-                    converted_params[param_name] = convert_vector2(params[param_name], param_name)
-                except Exception as e:
-                    # Provide a clear error message that references the specific parameter
-                    raise ParameterValidationError(f"Failed to convert {param_name} to Vector2: {str(e)}")
-        
-        # Convert Vector3 parameters
-        for param_name in self.vector3_params:
-            if param_name in params and params[param_name] is not None:
-                try:
-                    converted_params[param_name] = convert_vector3(params[param_name], param_name)
-                except Exception as e:
-                    # Provide a clear error message that references the specific parameter
-                    raise ParameterValidationError(f"Failed to convert {param_name} to Vector3: {str(e)}")
-        
-        # Convert Quaternion parameters
-        for param_name in self.quaternion_params:
-            if param_name in params and params[param_name] is not None:
-                try:
-                    converted_params[param_name] = convert_quaternion(params[param_name], param_name)
-                except Exception as e:
-                    # Provide a clear error message that references the specific parameter
-                    raise ParameterValidationError(f"Failed to convert {param_name} to Quaternion: {str(e)}")
-        
-        # Convert Euler angles to Quaternion
-        for param_name in self.euler_params:
-            if param_name in params and params[param_name] is not None:
-                try:
-                    converted_params[param_name] = euler_to_quaternion(params[param_name])
-                except Exception as e:
-                    # Provide a clear error message that references the specific parameter
-                    raise ParameterValidationError(f"Failed to convert {param_name} Euler angles to Quaternion: {str(e)}")
-        
-        # Convert Color parameters
-        for param_name in self.color_params:
-            if param_name in params and params[param_name] is not None:
-                try:
-                    converted_params[param_name] = convert_color(params[param_name], param_name)
-                except Exception as e:
-                    # Provide a clear error message that references the specific parameter
-                    raise ParameterValidationError(f"Failed to convert {param_name} to Color: {str(e)}")
-        
-        # Convert Rect parameters
-        for param_name in self.rect_params:
-            if param_name in params and params[param_name] is not None:
-                try:
-                    converted_params[param_name] = convert_rect(params[param_name], param_name)
-                except Exception as e:
-                    # Provide a clear error message that references the specific parameter
-                    raise ParameterValidationError(f"Failed to convert {param_name} to Rect: {str(e)}")
-        
-        # Convert Bounds parameters
-        for param_name in self.bounds_params:
-            if param_name in params and params[param_name] is not None:
-                try:
-                    converted_params[param_name] = convert_bounds(params[param_name], param_name)
-                except Exception as e:
-                    # Provide a clear error message that references the specific parameter
-                    raise ParameterValidationError(f"Failed to convert {param_name} to Bounds: {str(e)}")
-        
-        # Validate GameObject parameters
-        for param_name in self.gameobject_params:
-            if param_name in params and params[param_name] is not None:
-                try:
-                    validate_serialized_gameobject(params[param_name], param_name)
-                except Exception as e:
-                    # Provide a clear error message that references the specific parameter
-                    raise ParameterValidationError(f"Invalid {param_name} GameObject: {str(e)}")
-        
-        # Validate Component parameters
-        for param_name in self.component_params:
-            if param_name in params and params[param_name] is not None:
-                try:
-                    validate_serialized_component(params[param_name], param_name)
-                except Exception as e:
-                    # Provide a clear error message that references the specific parameter
-                    raise ParameterValidationError(f"Invalid {param_name} Component: {str(e)}")
-        
-        # Validate Transform parameters
-        for param_name in self.transform_params:
-            if param_name in params and params[param_name] is not None:
-                try:
-                    validate_serialized_transform(params[param_name], param_name)
-                except Exception as e:
-                    # Provide a clear error message that references the specific parameter
-                    raise ParameterValidationError(f"Invalid {param_name} Transform: {str(e)}")
-        
-        # Allow subclasses to add more specific validation and conversion
-        try:
-            self.additional_validation(action, converted_params)
-        except ParameterValidationError as e:
-            # Pass through validation errors from additional_validation
-            raise ParameterValidationError(str(e))
-        except Exception as e:
-            # Wrap other exceptions in ParameterValidationError
-            raise ParameterValidationError(f"Validation error in additional_validation: {str(e)}")
+        # For all parameters, apply type conversions if needed
+        for param_name, param_value in list(converted_params.items()):
+            if param_value is None:
+                continue  # Skip None values
+                
+            # Vector2 conversion
+            if param_name in self.vector2_params:
+                converted_params[param_name] = convert_vector2(param_value, param_name)
+                
+            # Vector3 conversion
+            elif param_name in self.vector3_params:
+                converted_params[param_name] = convert_vector3(param_value, param_name)
+                
+            # Quaternion conversion
+            elif param_name in self.quaternion_params:
+                converted_params[param_name] = convert_quaternion(param_value, param_name)
+                
+            # Euler to Quaternion conversion
+            elif param_name in self.euler_params:
+                converted_params[param_name] = euler_to_quaternion(param_value)
+                
+            # Color conversion
+            elif param_name in self.color_params:
+                converted_params[param_name] = convert_color(param_value, param_name)
+                
+            # Rect conversion
+            elif param_name in self.rect_params:
+                converted_params[param_name] = convert_rect(param_value, param_name)
+                
+            # Bounds conversion
+            elif param_name in self.bounds_params:
+                converted_params[param_name] = convert_bounds(param_value, param_name)
+                
+            # Validate serialized Unity objects if present
+            elif param_name in self.gameobject_params:
+                validate_serialized_gameobject(param_value, param_name)
+                
+            elif param_name in self.component_params:
+                validate_serialized_component(param_value, param_name)
+                
+            elif param_name in self.transform_params:
+                validate_serialized_transform(param_value, param_name)
+                
+        # Call additional validation specific to each tool
+        self.additional_validation(action, converted_params)
         
         return converted_params
     

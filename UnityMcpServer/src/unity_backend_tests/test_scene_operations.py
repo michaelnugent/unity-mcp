@@ -240,12 +240,17 @@ class TestSceneOperations:
         # If data is included, it should have expected fields
         if "data" in result:
             if isinstance(result["data"], dict):
-                # Some of these fields should be present
-                expected_fields = ["name", "path", "build_index", "is_dirty"]
+                # Check if the scene data is directly in data or nested in IntrospectedProperties
+                data_to_check = result["data"]
+                if "IntrospectedProperties" in data_to_check and isinstance(data_to_check["IntrospectedProperties"], dict):
+                    data_to_check = data_to_check["IntrospectedProperties"]
+                
+                # Some of these fields should be present (using camelCase to match Unity's response)
+                expected_fields = ["name", "path", "buildIndex", "isDirty"]
                 
                 # At least one of the expected fields should be present
-                found_fields = [field for field in expected_fields if field in result["data"]]
-                assert len(found_fields) > 0, f"None of the expected fields {expected_fields} were found in {result['data']}"
+                found_fields = [field for field in expected_fields if field in data_to_check]
+                assert len(found_fields) > 0, f"None of the expected fields {expected_fields} were found in {data_to_check}"
 
     def test_get_open_scenes(self, unity_conn):
         """Test retrieving open scenes from a real Unity instance.

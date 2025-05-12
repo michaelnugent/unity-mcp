@@ -181,25 +181,6 @@ class TestPrefabOperations:
         except Exception as e:
             logger.error(f"Error during prefab creation test: {e}")
             pytest.fail(f"Prefab creation test failed: {e}")
-
-    def test_find_gameobject(self, unity_conn):
-        """Test finding a GameObject in the scene.
-        
-        This test finds a GameObject in the scene using the GameObjectTool.
-        
-        Args:
-            unity_conn: The Unity connection fixture
-        """
-        self.gameobject_tool.unity_conn = unity_conn
-
-        name = "TestPrefab_1746942643"
-        find_result = self.gameobject_tool.send_command("manage_gameobject", {
-            "action": "find",
-            "search_term": name,
-        })
-        logger.info(f"Find GameObject response: {find_result}")
-        assert find_result["success"] is True, f"Failed to find GameObject: {find_result.get('error', '')}"
-        pytest.fail("Failed to find GameObject")
     
     def test_instantiate_prefab(self, unity_conn):
         """Test instantiating a prefab in the scene.

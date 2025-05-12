@@ -584,13 +584,28 @@ def get_unity_children(serialized_gameobject):
     Returns:
         List of child GameObjects, or empty list if none found
     """
+    logger = logging.getLogger(__name__)
+    
     if not is_serialized_unity_object(serialized_gameobject):
         return []
+    
+    # Log all keys for debugging
+    logger.info(f"Looking for children in keys: {serialized_gameobject.keys()}")
         
     # Try to get children from the enhanced serialization format
     if SERIALIZATION_CHILDREN_KEY in serialized_gameobject:
+        logger.info(f"Found children in {SERIALIZATION_CHILDREN_KEY}")
         return serialized_gameobject[SERIALIZATION_CHILDREN_KEY]
-        
+    
+    # Check for 'children' key (without the __ prefix)
+    if 'children' in serialized_gameobject and isinstance(serialized_gameobject['children'], list):
+        logger.info(f"Found children in 'children' key, count: {len(serialized_gameobject['children'])}")
+        return serialized_gameobject['children']
+    
+    # Check if we have childCount but no children, which might indicate that serialization depth is too low
+    if 'childCount' in serialized_gameobject and serialized_gameobject['childCount'] > 0:
+        logger.info(f"Found childCount = {serialized_gameobject['childCount']} but no children array, likely due to serialization depth")
+    
     return []
 
 def find_component_by_type(serialized_gameobject, component_type):
@@ -682,10 +697,37 @@ def get_serialization_depth(obj):
     Returns:
         The serialization depth string (Basic, Standard, Deep), or None if not specified
     """
+    logger = logging.getLogger(__name__)
+    
     if not is_serialized_unity_object(obj):
         return None
+    
+    # First check if it's explicitly specified
+    if SERIALIZATION_DEPTH_KEY in obj:
+        return obj.get(SERIALIZATION_DEPTH_KEY)
+    
+    # If not explicitly specified, infer from contents
+    if 'children' in obj and isinstance(obj['children'], list) and len(obj['children']) > 0:
+        # Objects with children are at least Standard depth
+        for child in obj['children']:
+            # If children have components field, it's likely Deep
+            if 'components' in child and isinstance(child['components'], list) and len(child['components']) > 0:
+                logger.debug("Inferred serialization depth: Deep (children have components)")
+                return SERIALIZATION_DEPTH_DEEP
         
-    return obj.get(SERIALIZATION_DEPTH_KEY)
+        logger.debug("Inferred serialization depth: Standard (has children)")
+        return SERIALIZATION_DEPTH_STANDARD
+    
+    # If it doesn't have the expected depth indicators, check for minimal info
+    # Minimal info would indicate Basic depth
+    if 'components' not in obj and 'children' not in obj and '__components' not in obj and '__children' not in obj:
+        # Very minimal info, likely Basic depth
+        logger.debug("Inferred serialization depth: Basic (minimal info)")
+        return SERIALIZATION_DEPTH_BASIC
+    
+    # Default to Standard if we can't determine
+    logger.debug("Defaulting to Standard serialization depth")
+    return SERIALIZATION_DEPTH_STANDARD
 
 def extract_transform_data(serialized_gameobject):
     """Extract Transform data from a serialized GameObject.

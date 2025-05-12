@@ -45,18 +45,18 @@ namespace UnityMcpBridge.Editor.Tools
                     return Response.Error($"Invalid prefab action: '{action}'. Valid actions are: {string.Join(", ", ValidActions)}");
                 }
 
-                string prefabPath = @params["prefabPath"]?.ToString();
-                string destinationPath = @params["destinationPath"]?.ToString();
-                string gameObjectPath = @params["gameObjectPath"]?.ToString();
-                string componentType = @params["componentType"]?.ToString();
-                JObject componentProperties = @params["componentProperties"] as JObject;
+                string prefabPath = @params["prefab_path"]?.ToString();
+                string destinationPath = @params["destination_path"]?.ToString();
+                string gameObjectPath = @params["game_object_path"]?.ToString();
+                string componentType = @params["component_type"]?.ToString();
+                JObject componentProperties = @params["component_properties"] as JObject;
                 JArray position = @params["position"] as JArray;
                 JArray rotation = @params["rotation"] as JArray;
                 JArray scale = @params["scale"] as JArray;
-                string parentPath = @params["parentPath"]?.ToString();
+                string parentPath = @params["parent_path"]?.ToString();
                 JArray overrides = @params["overrides"] as JArray;
-                string variantName = @params["variantName"]?.ToString();
-                JObject modifiedProperties = @params["modifiedProperties"] as JObject;
+                string variantName = @params["variant_name"]?.ToString();
+                JObject modifiedProperties = @params["modified_properties"] as JObject;
 
                 Debug.Log($"[ManagePrefabs] Action: {action}");
 

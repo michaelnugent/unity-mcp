@@ -12,6 +12,7 @@ with support for metadata, circular references, and hierarchical relationships.
 from typing import Any, Dict, List, Tuple, Union, Optional
 import math
 from exceptions import ParameterValidationError
+import logging
 
 # Type aliases for clarity
 Vector2Type = Union[Dict[str, float], List[float], Tuple[float, float]]
@@ -467,14 +468,65 @@ def extract_type_info(obj):
         
     type_info = {}
     
+    # Try to get type info from top level
     if SERIALIZATION_TYPE_KEY in obj:
-        type_info['type'] = obj[SERIALIZATION_TYPE_KEY]
+        full_type = obj[SERIALIZATION_TYPE_KEY]
+        # Store the short name (without namespace) for 'type'
+        type_info['type'] = full_type.split('.')[-1] if '.' in full_type else full_type
+        # Store the full type name including namespace for 'unity_type'
+        if '.' in full_type:
+            type_info['unity_type'] = full_type
+        else:
+            # Add UnityEngine namespace if it's just a short name
+            type_info['unity_type'] = f"UnityEngine.{full_type}"
         
-    if SERIALIZATION_UNITY_TYPE_KEY in obj:
-        type_info['unity_type'] = obj[SERIALIZATION_UNITY_TYPE_KEY]
+    elif SERIALIZATION_UNITY_TYPE_KEY in obj:
+        full_type = obj[SERIALIZATION_UNITY_TYPE_KEY]
+        # Store the short name (without namespace) for 'type'
+        type_info['type'] = full_type.split('.')[-1] if '.' in full_type else full_type
+        # Store the full type name including namespace for 'unity_type'
+        type_info['unity_type'] = full_type
         
+    # Try to get type info from IntrospectedProperties
+    if 'IntrospectedProperties' in obj and isinstance(obj['IntrospectedProperties'], dict):
+        introspected = obj['IntrospectedProperties']
+        
+        # Check for type info in introspected properties
+        if SERIALIZATION_TYPE_KEY in introspected and 'type' not in type_info:
+            full_type = introspected[SERIALIZATION_TYPE_KEY]
+            type_info['type'] = full_type.split('.')[-1] if '.' in full_type else full_type
+            
+        if SERIALIZATION_UNITY_TYPE_KEY in introspected and 'unity_type' not in type_info:
+            type_info['unity_type'] = introspected[SERIALIZATION_UNITY_TYPE_KEY]
+    
+    # Fall back to ObjectTypeName if available
+    if 'ObjectTypeName' in obj and ('type' not in type_info or 'unity_type' not in type_info):
+        full_type = obj['ObjectTypeName']
+        
+        # Set 'type' if not already set - just the short name
+        if 'type' not in type_info:
+            type_info['type'] = full_type.split('.')[-1] if '.' in full_type else full_type
+            
+        # Set 'unity_type' if not already set - full namespace
+        if 'unity_type' not in type_info:
+            type_info['unity_type'] = full_type
+    
+    # Ensure unity_type has UnityEngine namespace for built-in types
+    if 'unity_type' in type_info and '.' not in type_info['unity_type']:
+        type_info['unity_type'] = f"UnityEngine.{type_info['unity_type']}"
+        
+    # Handle ID information - check several possible sources
     if SERIALIZATION_ID_KEY in obj:
         type_info['id'] = obj[SERIALIZATION_ID_KEY]
+    
+    if 'InstanceID' in obj:
+        type_info['id'] = obj['InstanceID']
+    
+    if 'instanceID' in obj:
+        type_info['id'] = obj['instanceID']
+    
+    if '__object_id' in obj:
+        type_info['id'] = obj['__object_id']
         
     if SERIALIZATION_PATH_KEY in obj:
         type_info['path'] = obj[SERIALIZATION_PATH_KEY]
@@ -490,12 +542,27 @@ def get_unity_components(serialized_gameobject):
     Returns:
         List of component objects, or empty list if none found
     """
+    logger = logging.getLogger(__name__)
+    
+    # Debug logging
+    logger.info(f"Looking for components in: {serialized_gameobject.keys() if isinstance(serialized_gameobject, dict) else 'Not a dict'}")
+    
     if not is_serialized_unity_object(serialized_gameobject):
+        logger.info(f"Not a serialized Unity object: {serialized_gameobject.get('__type') if isinstance(serialized_gameobject, dict) else 'N/A'}")
         return []
         
     # Try to get components from the enhanced serialization format
     if SERIALIZATION_COMPONENTS_KEY in serialized_gameobject:
+        logger.info(f"Found components in {SERIALIZATION_COMPONENTS_KEY}")
         return serialized_gameobject[SERIALIZATION_COMPONENTS_KEY]
+    
+    # Also check for 'components' key (without the __ prefix)
+    if 'components' in serialized_gameobject and isinstance(serialized_gameobject['components'], list):
+        comps = serialized_gameobject['components']
+        logger.info(f"Found components in 'components', count: {len(comps)}")
+        for i, comp in enumerate(comps):
+            logger.info(f"Component {i}: {comp.get('__type') if isinstance(comp, dict) else 'Not a dict'}")
+        return comps
         
     # Fallback to older format or custom objects
     components = []
@@ -505,6 +572,7 @@ def get_unity_components(serialized_gameobject):
             key != SERIALIZATION_CHILDREN_KEY):
             components.append(value)
             
+    logger.info(f"Found {len(components)} components via fallback")
     return components
 
 def get_unity_children(serialized_gameobject):
@@ -516,13 +584,28 @@ def get_unity_children(serialized_gameobject):
     Returns:
         List of child GameObjects, or empty list if none found
     """
+    logger = logging.getLogger(__name__)
+    
     if not is_serialized_unity_object(serialized_gameobject):
         return []
+    
+    # Log all keys for debugging
+    logger.info(f"Looking for children in keys: {serialized_gameobject.keys()}")
         
     # Try to get children from the enhanced serialization format
     if SERIALIZATION_CHILDREN_KEY in serialized_gameobject:
+        logger.info(f"Found children in {SERIALIZATION_CHILDREN_KEY}")
         return serialized_gameobject[SERIALIZATION_CHILDREN_KEY]
-        
+    
+    # Check for 'children' key (without the __ prefix)
+    if 'children' in serialized_gameobject and isinstance(serialized_gameobject['children'], list):
+        logger.info(f"Found children in 'children' key, count: {len(serialized_gameobject['children'])}")
+        return serialized_gameobject['children']
+    
+    # Check if we have childCount but no children, which might indicate that serialization depth is too low
+    if 'childCount' in serialized_gameobject and serialized_gameobject['childCount'] > 0:
+        logger.info(f"Found childCount = {serialized_gameobject['childCount']} but no children array, likely due to serialization depth")
+    
     return []
 
 def find_component_by_type(serialized_gameobject, component_type):
@@ -535,22 +618,46 @@ def find_component_by_type(serialized_gameobject, component_type):
     Returns:
         The component object, or None if not found
     """
+    logger = logging.getLogger(__name__)
+    
+    logger.info(f"Looking for component of type: {component_type}")
+    
     if not is_serialized_unity_object(serialized_gameobject) or not component_type:
+        logger.info("GameObject is not a serialized unity object or component_type is empty")
         return None
         
     components = get_unity_components(serialized_gameobject)
+    logger.info(f"Found {len(components)} components")
     
-    for component in components:
-        # Check for exact type match
-        if component.get(SERIALIZATION_UNITY_TYPE_KEY) == component_type:
-            return component
-            
-        # Check if the type name ends with the component type
-        # This handles namespace prefixes (e.g., "UnityEngine.Transform" matches "Transform")
-        type_name = component.get(SERIALIZATION_UNITY_TYPE_KEY, "")
-        if type_name.endswith(f".{component_type}") or type_name == component_type:
-            return component
-            
+    for i, component in enumerate(components):
+        # Check component type information
+        type_name = None
+        
+        # First check for unity_type
+        if SERIALIZATION_UNITY_TYPE_KEY in component:
+            type_name = component[SERIALIZATION_UNITY_TYPE_KEY]
+            logger.info(f"Component {i} has unity_type: {type_name}")
+        
+        # If not found, try regular type field
+        if not type_name and SERIALIZATION_TYPE_KEY in component:
+            type_name = component[SERIALIZATION_TYPE_KEY]
+            logger.info(f"Component {i} has type: {type_name}")
+        
+        # If we have a type name, check for matches
+        if type_name:
+            # Check for exact type match
+            if type_name == component_type:
+                logger.info(f"Found exact match for {component_type}")
+                return component
+                
+            # Check if the type name ends with the component type
+            # This handles namespace prefixes (e.g., "UnityEngine.Transform" matches "Transform")
+            if type_name.endswith(f".{component_type}") or type_name == component_type:
+                logger.info(f"Found match with namespace: {type_name} for {component_type}")
+                return component
+    
+    # If we got here, we didn't find the component
+    logger.info(f"No component of type {component_type} found")
     return None
 
 def is_circular_reference(obj):
@@ -590,10 +697,37 @@ def get_serialization_depth(obj):
     Returns:
         The serialization depth string (Basic, Standard, Deep), or None if not specified
     """
+    logger = logging.getLogger(__name__)
+    
     if not is_serialized_unity_object(obj):
         return None
+    
+    # First check if it's explicitly specified
+    if SERIALIZATION_DEPTH_KEY in obj:
+        return obj.get(SERIALIZATION_DEPTH_KEY)
+    
+    # If not explicitly specified, infer from contents
+    if 'children' in obj and isinstance(obj['children'], list) and len(obj['children']) > 0:
+        # Objects with children are at least Standard depth
+        for child in obj['children']:
+            # If children have components field, it's likely Deep
+            if 'components' in child and isinstance(child['components'], list) and len(child['components']) > 0:
+                logger.debug("Inferred serialization depth: Deep (children have components)")
+                return SERIALIZATION_DEPTH_DEEP
         
-    return obj.get(SERIALIZATION_DEPTH_KEY)
+        logger.debug("Inferred serialization depth: Standard (has children)")
+        return SERIALIZATION_DEPTH_STANDARD
+    
+    # If it doesn't have the expected depth indicators, check for minimal info
+    # Minimal info would indicate Basic depth
+    if 'components' not in obj and 'children' not in obj and '__components' not in obj and '__children' not in obj:
+        # Very minimal info, likely Basic depth
+        logger.debug("Inferred serialization depth: Basic (minimal info)")
+        return SERIALIZATION_DEPTH_BASIC
+    
+    # Default to Standard if we can't determine
+    logger.debug("Defaulting to Standard serialization depth")
+    return SERIALIZATION_DEPTH_STANDARD
 
 def extract_transform_data(serialized_gameobject):
     """Extract Transform data from a serialized GameObject.

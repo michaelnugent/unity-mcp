@@ -34,9 +34,9 @@ namespace UnityMcpBridge.Editor.Tools
         {
             string action = @params["action"]?.ToString().ToLower();
             // Parameters for specific actions
-            string tagName = @params["tagName"]?.ToString();
-            string layerName = @params["layerName"]?.ToString();
-            bool waitForCompletion = @params["waitForCompletion"]?.ToObject<bool>() ?? false; // Example - not used everywhere
+            string tagName = @params["tag_name"]?.ToString();
+            string layerName = @params["layer_name"]?.ToString();
+            bool waitForCompletion = @params["wait_for_completion"]?.ToObject<bool>() ?? false; // Example - not used everywhere
 
             if (string.IsNullOrEmpty(action))
             {
@@ -102,19 +102,20 @@ namespace UnityMcpBridge.Editor.Tools
                 case "get_selection":
                     return GetSelection();
                 case "set_active_tool":
-                    string toolName = @params["toolName"]?.ToString();
+                    // Only accept snake_case parameter name
+                    string toolName = @params["tool_name"]?.ToString();
                     if (string.IsNullOrEmpty(toolName))
-                        return Response.Error("'toolName' parameter required for set_active_tool.");
+                        return Response.Error("'tool_name' parameter required for set_active_tool.");
                     return SetActiveTool(toolName);
 
                 // Tag Management
                 case "add_tag":
                     if (string.IsNullOrEmpty(tagName))
-                        return Response.Error("'tagName' parameter required for add_tag.");
+                        return Response.Error("'tag_name' parameter required for add_tag.");
                     return AddTag(tagName);
                 case "remove_tag":
                     if (string.IsNullOrEmpty(tagName))
-                        return Response.Error("'tagName' parameter required for remove_tag.");
+                        return Response.Error("'tag_name' parameter required for remove_tag.");
                     return RemoveTag(tagName);
                 case "get_tags":
                     return GetTags(); // Helper to list current tags
@@ -122,11 +123,11 @@ namespace UnityMcpBridge.Editor.Tools
                 // Layer Management
                 case "add_layer":
                     if (string.IsNullOrEmpty(layerName))
-                        return Response.Error("'layerName' parameter required for add_layer.");
+                        return Response.Error("'layer_name' parameter required for add_layer.");
                     return AddLayer(layerName);
                 case "remove_layer":
                     if (string.IsNullOrEmpty(layerName))
-                        return Response.Error("'layerName' parameter required for remove_layer.");
+                        return Response.Error("'layer_name' parameter required for remove_layer.");
                     return RemoveLayer(layerName);
                 case "get_layers":
                     return GetLayers(); // Helper to list current layers

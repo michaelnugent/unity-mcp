@@ -31,8 +31,9 @@ class TestAssetOperations:
         without a real Unity connection.
         """
         self.asset_tool = AssetTool()
-        self.test_material_path = f"Assets/Materials/TestMaterial_{int(time.time())}.mat"
-        self.test_folder_path = f"Assets/Materials/TestFolder_{int(time.time())}"
+        timestamp = int(time.time())
+        self.test_material_path = f"Assets/Materials/TestMaterial_{timestamp}_{hash(self)}.mat"
+        self.test_folder_path = f"Assets/Materials/TestFolder_{timestamp}_{hash(self)}"
         
     def teardown_method(self):
         """Clean up any assets created during tests.
@@ -184,7 +185,6 @@ class TestAssetOperations:
                 "action": "create_asset",
                 "path": self.test_material_path,
                 "asset_type": "Material",
-                "assetType": "Material",  # Include both forms to handle either case
                 "properties": {
                     "color": [1.0, 0.5, 0.2, 1.0],  # Orange color
                     "name": f"TestMaterial_{int(time.time())}"
@@ -278,7 +278,6 @@ class TestAssetOperations:
                 "action": "create_asset",
                 "path": self.test_material_path,
                 "asset_type": "Material",
-                "assetType": "Material",  # Include both forms to handle either case
                 "properties": {
                     "color": [0.2, 0.5, 1.0, 1.0]  # Blue color
                 }
@@ -410,7 +409,6 @@ class TestAssetOperations:
                 "action": "create_asset",
                 "path": unique_material_path,
                 "asset_type": "Material",
-                "assetType": "Material",  # Include both forms to handle either case
                 "properties": {
                     "name": unique_material_name
                 }

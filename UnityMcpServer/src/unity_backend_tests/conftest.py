@@ -84,32 +84,47 @@ def cleanup_gameobjects(unity_conn):
     
     # Clean up test GameObjects
     try:
-        # First, find all test GameObjects
+        # Find all GameObjects in the scene without using wildcards
         result = unity_conn.send_command("manage_gameobject", {
             "action": "find",
-            "search_term": "Test*",
-            "find_all": True
+            "find_all": True,
+            "search_inactive": True
         })
         
         # Check if we got a valid response
         if isinstance(result, dict) and "data" in result:
             gameobjects = result.get("data", [])
+            test_objects_to_delete = []
             
             # Make sure gameObjects is a list
             if isinstance(gameobjects, list):
+                # First, identify all test objects (those starting with "Test")
                 for go in gameobjects:
                     if isinstance(go, dict) and "name" in go:
                         go_name = go.get("name", "")
-                        try:
-                            unity_conn.send_command("manage_gameobject", {
-                                "action": "delete",
-                                "target": go_name
-                            })
-                            logger.info(f"Cleaned up GameObject: {go_name}")
-                        except Exception as e:
-                            logger.warning(f"Error deleting GameObject {go_name}: {str(e)}")
+                        # Check if the name starts with "Test"
+                        if go_name and go_name.startswith("Test"):
+                            test_objects_to_delete.append(go_name)
+                
+                # Then delete them one by one
+                for test_obj_name in test_objects_to_delete:
+                    try:
+                        unity_conn.send_command("manage_gameobject", {
+                            "action": "delete",
+                            "target": test_obj_name
+                        })
+                        logger.info(f"Cleaned up GameObject: {test_obj_name}")
+                    except Exception as e:
+                        logger.warning(f"Error deleting GameObject {test_obj_name}: {str(e)}")
+                
+                if test_objects_to_delete:
+                    logger.info(f"Cleaned up {len(test_objects_to_delete)} test GameObjects")
+                else:
+                    logger.info("No test GameObjects found for cleanup")
+            else:
+                logger.warning(f"Unexpected response format for GameObjects: {gameobjects}")
         else:
-            logger.warning(f"Unable to find test GameObjects for cleanup: {result}")
+            logger.warning(f"Unable to find GameObjects for cleanup: {result}")
     except Exception as e:
         logger.warning(f"Error during cleanup: {str(e)}")
 

@@ -186,6 +186,8 @@ namespace UnityMcpBridge.Editor.Helpers
         {
             if (obj == null)
             {
+                // log null object
+                Debug.Log($"[SERIALIZATION] obj is null");
                 return new SerializationResult<object>
                 {
                     WasFullySerialized = true,
@@ -215,6 +217,9 @@ namespace UnityMcpBridge.Editor.Helpers
                 result.InstanceID = unityObject.GetInstanceID();
             }
 
+            // Debug.Log($"[SERIALIZATION] obj: {obj}");
+            // Debug.Log($"[SERIALIZATION] objType: {objType}");
+            // Debug.Log($"[SERIALIZATION] result: {result}");
             // Check for circular references
             string referencePath = _referenceTracker.GetReferencePath(obj);
             if (referencePath != null)
@@ -229,7 +234,6 @@ namespace UnityMcpBridge.Editor.Helpers
             
             // Add this object to the reference tracker
             _referenceTracker.AddReference(obj);
-            
             try
             {
                 // First, try to use a specialized handler if available
@@ -237,7 +241,7 @@ namespace UnityMcpBridge.Editor.Helpers
                 ISerializationHandler handler = SerializationHandlerRegistry.GetHandler(objType);
                 if (handler != null)
                 {
-                    Debug.Log($"[SERIALIZATION] Using handler {handler.GetType().Name} for type {objType.FullName}");
+                    //Debug.Log($"[SERIALIZATION] Using handler {handler.GetType().Name} for type {objType.FullName}");
                     try
                     {
                         Dictionary<string, object> handlerResult = handler.Serialize(obj, depth);
@@ -291,6 +295,18 @@ namespace UnityMcpBridge.Editor.Helpers
                         result.__serialized_properties.AddRange(properties.Keys);
                     }
                 }
+
+                // // log result in detail
+                // Debug.Log($"[SERIALIZATION] result: {result}");
+                // // log result.IntrospectedProperties
+                // Debug.Log($"[SERIALIZATION] result.IntrospectedProperties: {result.IntrospectedProperties}");
+                // // log result.Data
+                // Debug.Log($"[SERIALIZATION] result.Data: {result.Data}");
+                // // log result.ErrorMessage
+                // Debug.Log($"[SERIALIZATION] result.ErrorMessage: {result.ErrorMessage}");
+                // // log result.WasFullySerialized
+                // Debug.Log($"[SERIALIZATION] result.WasFullySerialized: {result.WasFullySerialized}");
+                
                 
                 return result;
             }

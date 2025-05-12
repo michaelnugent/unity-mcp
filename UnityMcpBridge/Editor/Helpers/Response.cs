@@ -38,6 +38,33 @@ namespace UnityMcpBridge.Editor.Helpers
         }
 
         /// <summary>
+        /// Creates a standardized warning response object for partially successful operations.
+        /// </summary>
+        /// <param name="warningMessage">A message describing the warning or partial success.</param>
+        /// <param name="data">Optional additional data to include in the response.</param>
+        /// <param name="serializationDepth">The depth level for serialization of complex objects.</param>
+        /// <returns>An object representing the warning response.</returns>
+        public static object Warning(string warningMessage, object data = null, SerializationHelper.SerializationDepth serializationDepth = SerializationHelper.SerializationDepth.Standard)
+        {
+            if (data != null)
+            {
+                // Create a result object with serialized data
+                var serializedData = SerializeResponseData(data, serializationDepth);
+                
+                return new
+                {
+                    success = true,
+                    warning = warningMessage,
+                    data = serializedData,
+                };
+            }
+            else
+            {
+                return new { success = true, warning = warningMessage };
+            }
+        }
+
+        /// <summary>
         /// Creates a standardized error response object.
         /// </summary>
         /// <param name="errorMessage">A message describing the error.</param>
@@ -86,7 +113,7 @@ namespace UnityMcpBridge.Editor.Helpers
                 // the JSON serializer handle them directly for now
                 
                 // For complex types, use our enhanced serialization
-                return SerializationHelper.CreateSerializationResult(data, depth).Data;
+                return SerializationHelper.CreateSerializationResult(data, depth);
             }
             catch (Exception ex)
             {

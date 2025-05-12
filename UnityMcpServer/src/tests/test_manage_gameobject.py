@@ -43,48 +43,29 @@ def registered_tool(mock_fastmcp, mock_unity_connection):
         if 'include_inactive' in params and 'search_inactive' not in params:
             params['search_inactive'] = params.pop('include_inactive')
             
-        # Handle prefabPath creation
+        # Handle prefab_path creation
         if action == "create" and params.get("save_as_prefab") and "prefab_path" not in params:
             if "name" in params:
                 params["prefab_path"] = f"Assets/Prefabs/{params['name']}.prefab"
         
         try:
-            # Prepare converted parameters for Unity
-            param_conversion = {
-                'search_term': 'searchTerm',
-                'components_to_add': 'componentsToAdd',
-                'components_to_remove': 'componentsToRemove',
-                'component_properties': 'componentProperties',
-                'prefab_path': 'prefabPath',
-                'save_as_prefab': 'saveAsPrefab',
-                'find_all': 'findAll',
-                'search_inactive': 'searchInactive',
-                'search_in_children': 'searchInChildren'
-            }
-            
-            converted_params = {}
-            for k, v in params.items():
-                # Convert snake_case to camelCase if in our conversion map
-                new_key = param_conversion.get(k, k)
-                converted_params[new_key] = v
-                
             # Special case for parameter compatibility test
             # If this is the test_gameobject_tool_parameter_compatibility test (we can tell by the params)
-            if (action == 'find' and 'searchTerm' not in converted_params and 
-                'target' in converted_params and 'parent' in converted_params and 
-                'searchInactive' in converted_params):
+            if (action == 'find' and 'search_term' not in params and 
+                'target' in params and 'parent' in params and 
+                'search_inactive' in params):
                 # Skip validation for this specific test case
-                mock_unity_connection.send_command("manage_gameobject", converted_params)
+                mock_unity_connection.send_command("manage_gameobject", params)
                 return mock_unity_connection.send_command.return_value
             
-            # For all other cases, do validation on the converted parameters
+            # For all other cases, do validation
             if action:
-                # Validate camelCase parameters (after conversion)
-                gameobject_tool.validate_params(action, converted_params)
-                gameobject_tool.additional_validation(action, converted_params)
+                # Validate parameters 
+                gameobject_tool.validate_params(action, params)
+                gameobject_tool.additional_validation(action, params)
             
-            # Call Unity with converted parameters
-            mock_unity_connection.send_command("manage_gameobject", converted_params)
+            # Call Unity with parameters
+            mock_unity_connection.send_command("manage_gameobject", params)
             return mock_unity_connection.send_command.return_value
         except ParameterValidationError as e:
             return {"success": False, "message": str(e), "validation_error": True}
@@ -148,8 +129,8 @@ async def test_gameobject_tool_find(registered_tool, mock_context, mock_unity_co
     # Check correct parameters were sent
     assert_command_called_with(mock_unity_connection, "manage_gameobject", {
         "action": "find",
-        "searchTerm": "Enemy",
-        "findAll": True
+        "search_term": "Enemy",
+        "find_all": True
     })
 
 @pytest.mark.asyncio
@@ -209,7 +190,7 @@ async def test_gameobject_tool_add_component(registered_tool, mock_context, mock
     assert_command_called_with(mock_unity_connection, "manage_gameobject", {
         "action": "add_component",
         "target": "TestObject",
-        "componentsToAdd": ["UnityEngine.BoxCollider", "UnityEngine.Rigidbody"]
+        "components_to_add": ["UnityEngine.BoxCollider", "UnityEngine.Rigidbody"]
     })
 
 @pytest.mark.asyncio
@@ -246,7 +227,7 @@ async def test_gameobject_tool_set_component_property(registered_tool, mock_cont
     assert_command_called_with(mock_unity_connection, "manage_gameobject", {
         "action": "set_component_property",
         "target": "TestObject",
-        "componentProperties": component_properties
+        "component_properties": component_properties
     })
 
 @pytest.mark.asyncio
@@ -274,7 +255,7 @@ async def test_gameobject_tool_instantiate_prefab(registered_tool, mock_context,
     # Check correct parameters were sent
     assert_command_called_with(mock_unity_connection, "manage_gameobject", {
         "action": "instantiate",
-        "prefabPath": "Assets/Prefabs/Enemy.prefab",
+        "prefab_path": "Assets/Prefabs/Enemy.prefab",
         "position": [5, 0, 5]
     })
 
@@ -285,7 +266,7 @@ async def test_gameobject_tool_save_as_prefab(registered_tool, mock_context, moc
     mock_unity_connection.send_command.return_value = {
         "success": True,
         "message": "GameObject created and saved as prefab successfully",
-        "data": {"id": "obj123", "prefabPath": "Assets/Prefabs/TestPrefab.prefab"}
+        "data": {"id": "obj123", "prefab_path": "Assets/Prefabs/TestPrefab.prefab"}
     }
     
     # Call the tool function
@@ -306,8 +287,8 @@ async def test_gameobject_tool_save_as_prefab(registered_tool, mock_context, moc
         "action": "create",
         "name": "TestPrefab",
         "position": [0, 1, 0],
-        "saveAsPrefab": True,
-        "prefabPath": "Assets/Prefabs/TestPrefab.prefab"
+        "save_as_prefab": True,
+        "prefab_path": "Assets/Prefabs/TestPrefab.prefab"
     })
 
 @pytest.mark.asyncio
@@ -326,7 +307,7 @@ async def test_gameobject_tool_parameter_compatibility(registered_tool, mock_con
         action="find",
         object_id="obj123",  # Should be mapped to target
         parent_id="parent456",  # Should be mapped to parent
-        include_inactive=True  # Should be mapped to searchInactive
+        include_inactive=True  # Should be mapped to search_inactive
     )
     
     # Check result
@@ -337,7 +318,7 @@ async def test_gameobject_tool_parameter_compatibility(registered_tool, mock_con
         "action": "find",
         "target": "obj123",
         "parent": "parent456",
-        "searchInactive": True
+        "search_inactive": True
     })
 
 @pytest.mark.asyncio
@@ -364,16 +345,16 @@ async def test_gameobject_tool_class_validation(gameobject_tool_instance, mock_u
     """Test GameObjectTool class validation methods."""
     # Test valid prefab path
     gameobject_tool_instance.additional_validation("create", {
-        "saveAsPrefab": True,
-        "prefabPath": "Assets/Prefabs/Test.prefab",
+        "save_as_prefab": True,
+        "prefab_path": "Assets/Prefabs/Test.prefab",
         "name": "Test"
     })
     
-    # Test when prefabPath is missing and saveAsPrefab is true
+    # Test when prefab_path is missing and save_as_prefab is true
     with pytest.raises(ParameterValidationError, match="Invalid prefab path"):
         gameobject_tool_instance.additional_validation("create", {
-            "saveAsPrefab": True,
-            "prefabPath": "Assets/Prefabs/Test.txt",  # Invalid extension
+            "save_as_prefab": True,
+            "prefab_path": "Assets/Prefabs/Test.txt",  # Invalid extension
             "name": "Test"
         })
     

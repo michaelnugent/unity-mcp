@@ -332,26 +332,26 @@ class AssetTool(BaseTool):
             params_dict = {
                 "action": action.lower(),
                 "path": path,
-                "assetType": asset_type,
+                "asset_type": asset_type,
                 "properties": properties,
                 "destination": destination,
-                "generatePreview": generate_preview,
-                "searchPattern": search_pattern,
-                "filterType": filter_type,
-                "filterDateAfter": filter_date_after,
-                "pageSize": page_size,
-                "pageNumber": page_number,
+                "generate_preview": generate_preview,
+                "search_pattern": search_pattern,
+                "filter_type": filter_type,
+                "filter_date_after": filter_date_after,
+                "page_size": page_size,
+                "page_number": page_number,
                 # Additional parameters from manage_assets
-                "newName": new_name,
-                "sourceFile": source_file,
+                "new_name": new_name,
+                "source_file": source_file,
                 "guid": guid,
-                "includeDependencies": include_dependencies,
+                "include_dependencies": include_dependencies,
                 "recursive": recursive,
                 "labels": labels,
-                "bundleName": bundle_name,
+                "bundle_name": bundle_name,
                 "variant": variant,
-                "importOptions": import_options,
-                "creationParams": creation_params
+                "import_options": import_options,
+                "creation_params": creation_params
             }
             
             # Remove None values to avoid sending unnecessary nulls

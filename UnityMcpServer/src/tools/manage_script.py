@@ -97,15 +97,15 @@ class ScriptTool(BaseTool):
                     "name": name,
                     "path": path,
                     "namespace": namespace,
-                    "scriptType": script_type
+                    "script_type": script_type
                 }
                 
                 # Base64 encode the contents if they exist to avoid JSON escaping issues
                 if contents is not None:
                     if action in ['create', 'update']:
                         # Encode content for safer transmission
-                        params["encodedContents"] = base64.b64encode(contents.encode('utf-8')).decode('utf-8')
-                        params["contentsEncoded"] = True
+                        params["encoded_contents"] = base64.b64encode(contents.encode('utf-8')).decode('utf-8')
+                        params["contents_encoded"] = True
                     else:
                         params["contents"] = contents
                 
@@ -118,11 +118,11 @@ class ScriptTool(BaseTool):
                 # Process response from Unity
                 if response.get("success"):
                     # If the response contains base64 encoded content, decode it
-                    if response.get("data", {}).get("contentsEncoded"):
-                        decoded_contents = base64.b64decode(response["data"]["encodedContents"]).decode('utf-8')
+                    if response.get("data", {}).get("contents_encoded"):
+                        decoded_contents = base64.b64decode(response["data"]["encoded_contents"]).decode('utf-8')
                         response["data"]["contents"] = decoded_contents
-                        del response["data"]["encodedContents"]
-                        del response["data"]["contentsEncoded"]
+                        del response["data"]["encoded_contents"]
+                        del response["data"]["contents_encoded"]
                     
                     return {"success": True, "message": response.get("message", "Operation successful."), "data": response.get("data")}
                 else:

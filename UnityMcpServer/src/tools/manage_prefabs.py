@@ -130,18 +130,18 @@ class PrefabsTool(BaseTool):
             # Prepare parameters for the C# handler
             params_dict = {
                 "action": action.lower(),
-                "prefabPath": prefab_path,
-                "destinationPath": destination_path,
-                "gameObjectPath": game_object_path,
-                "componentType": component_type,
-                "componentProperties": component_properties,
+                "prefab_path": prefab_path,
+                "destination_path": destination_path,
+                "game_object_path": game_object_path,
+                "component_type": component_type,
+                "component_properties": component_properties,
                 "position": position,
                 "rotation": rotation,
                 "scale": scale,
-                "parentPath": parent_path,
+                "parent_path": parent_path,
                 "overrides": overrides,
-                "variantName": variant_name,
-                "modifiedProperties": modified_properties
+                "variant_name": variant_name,
+                "modified_properties": modified_properties
             }
             
             # Remove None values to avoid sending unnecessary nulls

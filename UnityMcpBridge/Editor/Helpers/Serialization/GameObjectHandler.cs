@@ -39,6 +39,7 @@ namespace UnityMcpBridge.Editor.Helpers.Serialization
                 ["instanceID"] = gameObject.GetInstanceID(),
                 ["isStatic"] = gameObject.isStatic,
                 ["__type"] = typeof(GameObject).FullName,
+                ["__unity_type"] = typeof(GameObject).FullName,
                 ["__object_id"] = gameObject.GetInstanceID().ToString(),
                 ["hierarchyPath"] = GetHierarchyPath(gameObject)
             };
@@ -66,7 +67,7 @@ namespace UnityMcpBridge.Editor.Helpers.Serialization
         /// <summary>
         /// Gets the full hierarchy path for a GameObject.
         /// </summary>
-        private string GetHierarchyPath(GameObject gameObject)
+        public string GetHierarchyPath(GameObject gameObject)
         {
             var transform = gameObject.transform;
             string path = gameObject.name;

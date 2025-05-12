@@ -95,5 +95,36 @@ namespace UnityMcpBridge.Editor.Helpers
         /// Base type information for class hierarchy understanding.
         /// </summary>
         public string __base_type;
+
+        public override string ToString()
+        {
+            string return_value = "ObjectTypeName: " + ObjectTypeName + "\n";
+            // all fields in detail
+            // string return_value = $"SerializationResult<{typeof(T).Name}>: {Data}";
+            // return_value += $"\nWasFullySerialized: {WasFullySerialized}";
+            // return_value += $"\nErrorMessage: {ErrorMessage}";
+            // return_value += $"\nObjectTypeName: {ObjectTypeName}";
+            // return_value += $"\nInstanceID: {InstanceID}";
+            // return_value += $"\nData: {Data}";
+            // return_value += $"\nIsCircularReference: {IsCircularReference}";
+            // return_value += $"\nCircularReferencePath: {CircularReferencePath}";
+            // return_value += $"\n__serialization_status: {__serialization_status}";
+            // return_value += $"\n__serialization_error: {__serialization_error}";
+            // return_value += $"\n__serialization_depth: {__serialization_depth}";
+            // return_value += $"\n__serialized_properties: {__serialized_properties}";
+            // return_value += $"\n__failed_properties: {__failed_properties}";
+            // return_value += $"\n__object_id: {__object_id}";
+            // return_value += $"\n__assembly_qualified_name: {__assembly_qualified_name}";
+            // return_value += $"\n__implemented_interfaces: {__implemented_interfaces}";
+            // return_value += $"\n__base_type: {__base_type}";
+
+            // string introspectedProperties = "";
+            // foreach (var property in IntrospectedProperties)
+            // {
+            //     introspectedProperties += $"\n{property.Key}: {property.Value}";
+            // }
+            // return_value += $"\nIntrospectedProperties: {introspectedProperties}";
+            return return_value;
+        }
     }
 } 

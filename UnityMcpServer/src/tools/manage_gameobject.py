@@ -51,18 +51,18 @@ class GameObjectTool(BaseTool):
         "create": {"name": str},
         "modify": {"target": str},
         "delete": {"target": str},
-        "find": {"searchTerm": str},
+        "find": {"search_term": str},
         "get_children": {"target": str},
         "get_components": {"target": str},
-        "add_component": {"target": str, "componentsToAdd": list},
-        "remove_component": {"target": str, "componentsToRemove": list},
-        "set_component_property": {"target": str, "componentProperties": dict},
-        "set_active": {"target": str, "setActive": bool},
+        "add_component": {"target": str, "components_to_add": list},
+        "remove_component": {"target": str, "components_to_remove": list},
+        "set_component_property": {"target": str, "component_properties": dict},
+        "set_active": {"target": str, "set_active": bool},
         "set_position": {"target": str, "position": list},
         "set_rotation": {"target": str, "rotation": list},
         "set_scale": {"target": str, "scale": list},
         "set_parent": {"target": str, "parent": str},
-        "instantiate": {"prefabPath": str},
+        "instantiate": {"prefab_path": str},
         "duplicate": {"target": str},
     }
     
@@ -108,10 +108,10 @@ class GameObjectTool(BaseTool):
             validate_action(action, valid_actions)
             
             # Validate prefab path format and extension
-            if action in ["create", "instantiate"] and params.get("prefabPath"):
+            if action in ["create", "instantiate"] and params.get("prefab_path"):
                 try:
                     validate_asset_path(
-                        params["prefabPath"], 
+                        params["prefab_path"], 
                         must_exist=(action == "instantiate"),
                         extension=".prefab"
                     )
@@ -119,8 +119,8 @@ class GameObjectTool(BaseTool):
                     raise ParameterValidationError(f"Invalid prefab path: {str(e)}")
             
             # Validate save_as_prefab requires prefab_path or name
-            if action == "create" and params.get("saveAsPrefab"):
-                if "prefabPath" not in params and "name" not in params:
+            if action == "create" and params.get("save_as_prefab"):
+                if "prefab_path" not in params and "name" not in params:
                     raise ParameterValidationError(
                         "Cannot create default prefab path: 'name' parameter is missing"
                     )
@@ -143,52 +143,64 @@ class GameObjectTool(BaseTool):
                     raise ParameterValidationError(f"Invalid parent GameObject: {str(e)}")
             
             # Validate components to add/remove
-            if "componentsToAdd" in params and params.get("componentsToAdd"):
-                for component_type in params["componentsToAdd"]:
+            if "components_to_add" in params and params.get("components_to_add"):
+                for component_type in params["components_to_add"]:
                     try:
                         validate_component_type(component_type)
                     except Exception as e:
                         raise ParameterValidationError(f"Invalid component type to add: {component_type} - {str(e)}")
                     
-            if "componentsToRemove" in params and params.get("componentsToRemove"):
-                for component_type in params["componentsToRemove"]:
+            if "components_to_remove" in params and params.get("components_to_remove"):
+                for component_type in params["components_to_remove"]:
                     try:
                         validate_component_type(component_type)
                     except Exception as e:
                         raise ParameterValidationError(f"Invalid component type to remove: {component_type} - {str(e)}")
                     
             # Validate component_properties format and structure
-            if "componentProperties" in params and params.get("componentProperties"):
-                if not isinstance(params["componentProperties"], dict):
+            if "component_properties" in params and params.get("component_properties"):
+                if not isinstance(params["component_properties"], dict):
                     raise ParameterValidationError(
-                        "componentProperties must be a dictionary mapping component types to property dictionaries"
+                        "component_properties must be a dictionary"
                     )
                 
-                # Check each component's properties
-                for component_type, properties in params["componentProperties"].items():
+                # Support two formats:
+                # 1. With component_name: Flat properties structure for single component
+                # 2. Without component_name: Nested structure for multiple components
+                if "component_name" in params and params["component_name"]:
+                    # With component_name, expect flat properties for the specified component
+                    component_type = params["component_name"]
                     try:
                         validate_component_type(component_type)
                     except Exception as e:
-                        raise ParameterValidationError(f"Invalid component type in properties: {component_type} - {str(e)}")
-                    
-                    if not isinstance(properties, dict):
-                        raise ParameterValidationError(
-                            f"Properties for component '{component_type}' must be a dictionary"
-                        )
+                        raise ParameterValidationError(f"Invalid component type: {component_type} - {str(e)}")
+                else:
+                    # Without component_name, we need nested structure for multiple components
+                    # Check each component's properties
+                    for component_type, properties in params["component_properties"].items():
+                        try:
+                            validate_component_type(component_type)
+                        except Exception as e:
+                            raise ParameterValidationError(f"Invalid component type in properties: {component_type} - {str(e)}")
+                        
+                        if not isinstance(properties, dict):
+                            raise ParameterValidationError(
+                                f"Properties for component '{component_type}' must be a dictionary"
+                            )
             
             # Validate primitive type
-            if "primitiveType" in params and params.get("primitiveType"):
-                if params["primitiveType"] not in self._valid_primitive_types:
+            if "primitive_type" in params and params.get("primitive_type"):
+                if params["primitive_type"] not in self._valid_primitive_types:
                     raise ParameterValidationError(
-                        f"Invalid primitiveType: '{params['primitiveType']}'. "
+                        f"Invalid primitive_type: '{params['primitive_type']}'. "
                         f"Valid types are: {', '.join(self._valid_primitive_types)}"
                     )
                     
             # Validate search method
-            if "searchMethod" in params and params.get("searchMethod"):
-                if params["searchMethod"] not in self._valid_search_methods:
+            if "search_method" in params and params.get("search_method"):
+                if params["search_method"] not in self._valid_search_methods:
                     raise ParameterValidationError(
-                        f"Invalid searchMethod: '{params['searchMethod']}'. "
+                        f"Invalid search_method: '{params['search_method']}'. "
                         f"Valid methods are: {', '.join(self._valid_search_methods)}"
                     )
             
@@ -257,8 +269,8 @@ class GameObjectTool(BaseTool):
                     if isinstance(response["data"], list):
                         count = len(response["data"])
                         if action == "find":
-                            search_term = params.get("searchTerm", "")
-                            search_method = params.get("searchMethod", "by_name")
+                            search_term = params.get("search_term", "")                            
+                            search_method = params.get("search_method", "by_name")
                             if count == 0:
                                 response["message"] = f"No GameObjects found matching '{search_term}' using method '{search_method}'"
                             elif count == 1:
@@ -291,7 +303,7 @@ class GameObjectTool(BaseTool):
                         name = params.get("name", "GameObject")
                         response["message"] = f"Created new GameObject '{name}'"
                     elif action == "instantiate":
-                        prefab_path = params.get("prefabPath", "")
+                        prefab_path = params.get("prefab_path", "")
                         response["message"] = f"Instantiated GameObject from prefab '{prefab_path}'"
                     elif action == "duplicate":
                         target = params.get("target", "")
@@ -305,19 +317,19 @@ class GameObjectTool(BaseTool):
                 if response.get("success"):
                     target = params.get("target", "")
                     if action == "add_component":
-                        components = params.get("componentsToAdd", [])
+                        components = params.get("components_to_add", [])
                         if len(components) == 1:
                             response["message"] = f"Added component '{components[0]}' to GameObject '{target}'"
                         else:
                             response["message"] = f"Added {len(components)} components to GameObject '{target}'"
                     elif action == "remove_component":
-                        components = params.get("componentsToRemove", [])
+                        components = params.get("components_to_remove", [])
                         if len(components) == 1:
                             response["message"] = f"Removed component '{components[0]}' from GameObject '{target}'"
                         else:
                             response["message"] = f"Removed {len(components)} components from GameObject '{target}'"
                     elif action == "set_component_property":
-                        component_count = len(params.get("componentProperties", {}))
+                        component_count = len(params.get("component_properties", {}))
                         response["message"] = f"Updated properties on {component_count} components on GameObject '{target}'"
                     
         except Exception as e:
@@ -582,31 +594,31 @@ class GameObjectTool(BaseTool):
             if include_inactive is not None and search_inactive is False:
                 search_inactive = include_inactive
             
-            # Convert snake_case parameter names to camelCase for Unity-side compatibility
+            # Build parameters dictionary with snake_case keys to match Unity's C# side
             params = {
                 "action": action,
                 "target": target,
-                "searchMethod": search_method,
+                "search_method": search_method,
                 "name": name,
                 "tag": tag,
                 "parent": parent,
                 "position": position,
                 "rotation": rotation,
                 "scale": scale,
-                "componentsToAdd": components_to_add,
-                "primitiveType": primitive_type,
-                "saveAsPrefab": save_as_prefab,
-                "prefabPath": prefab_path,
-                "prefabFolder": prefab_folder,
-                "setActive": set_active,
+                "components_to_add": components_to_add,
+                "primitive_type": primitive_type,
+                "save_as_prefab": save_as_prefab,
+                "prefab_path": prefab_path,
+                "prefab_folder": prefab_folder,
+                "set_active": set_active,
                 "layer": layer,
-                "componentsToRemove": components_to_remove,
-                "componentProperties": component_properties,
-                "searchTerm": search_term,
-                "findAll": find_all,
-                "searchInChildren": search_in_children,
-                "searchInactive": search_inactive,
-                "componentName": component_name,
+                "components_to_remove": components_to_remove,
+                "component_properties": component_properties,
+                "search_term": search_term,
+                "find_all": find_all,
+                "search_in_children": search_in_children,
+                "search_inactive": search_inactive,
+                "component_name": component_name,
                 "recursive": recursive
             }
             
@@ -614,20 +626,20 @@ class GameObjectTool(BaseTool):
             params = {k: v for k, v in params.items() if v is not None}
             
             # --- Handle Prefab Path Logic ---
-            if action == "create" and params.get("saveAsPrefab"): 
-                if "prefabPath" not in params:
+            if action == "create" and params.get("save_as_prefab"): 
+                if "prefab_path" not in params:
                     if "name" not in params or not params["name"]:
                         return {"success": False, "message": "Cannot create default prefab path: 'name' parameter is missing."}
                     # Use the provided prefab_folder (which has a default) and the name to construct the path
                     constructed_path = f"{prefab_folder}/{params['name']}.prefab"
                     # Ensure clean path separators (Unity prefers '/')
-                    params["prefabPath"] = constructed_path.replace("\\", "/")
-                elif not params["prefabPath"].lower().endswith(".prefab"):
-                    return {"success": False, "message": f"Invalid prefab_path: '{params['prefabPath']}' must end with .prefab"}
+                    params["prefab_path"] = constructed_path.replace("\\", "/")
+                elif not params["prefab_path"].lower().endswith(".prefab"):
+                    return {"success": False, "message": f"Invalid prefab_path: '{params['prefab_path']}' must end with .prefab"}
             
-            # Ensure prefab_folder itself isn't sent if prefabPath was constructed or provided
-            # The C# side only needs the final prefabPath
-            params.pop("prefabFolder", None) 
+            # Ensure prefab_folder itself isn't sent if prefab_path was constructed or provided
+            # The C# side only needs the final prefab_path
+            params.pop("prefab_folder", None)
 
             try:
                 # Send command with validation through the tool

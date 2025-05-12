@@ -6,7 +6,7 @@ Unity MCP acts as a bridge, allowing AI assistants (like Claude, Cursor) to inte
 
 ---
 
-## <picture><source media="(prefers-color-scheme: dark)" srcset="https://github.com/justinpbarnett/unity-mcp/assets/11047284/c279675a-dd58-406b-9613-5b16b5c6bb63"><source media="(prefers-color-scheme: light)" srcset="https://github.com/justinpbarnett/unity-mcp/assets/11047284/b54f891d-961b-4048-a9c4-3af46e2a52fc"><img alt="UnityMCP Workflow" width="100%" style="max-width: 600px; display: block; margin-left: auto; margin-right: auto;"></picture>
+## UnityMCP Workflow
 
 ## Key Features 🚀
 
@@ -27,7 +27,29 @@ Unity MCP acts as a bridge, allowing AI assistants (like Claude, Cursor) to inte
   *   `manage_asset`: Performs asset operations (import, create, modify, delete, etc.).
   *   `manage_gameobject`: Manages GameObjects: create, modify, delete, find, and component operations.
   *   `execute_menu_item`: Executes a menu item via its path (e.g., "File/Save Project").
+  *   `manage_prefabs`: Works with Unity prefabs (create, instantiate, modify).
 </details>
+
+---
+
+## Project Architecture 🏗️
+
+Unity MCP consists of four main components:
+
+1. **Unity MCP Bridge**: A Unity package that runs inside the Unity Editor
+2. **Unity MCP Server**: A Python server that communicates between MCP clients and the Unity Bridge
+3. **MCP Client** (external): LLM tools like Claude Desktop or Cursor that connect to the server
+4. **Unity MCP Client**: A Python client library providing a programmatic API and CLI for Unity MCP
+
+**Communication Flow:**
+```
+[MCP Client (Claude/Cursor)] <-> [Unity MCP Server (Python)] <-> [Unity MCP Bridge (Unity Editor)]
+```
+
+With the Unity MCP Client:
+```
+[Python Application] <-> [Unity MCP Client] <-> [Unity MCP Server] <-> [Unity MCP Bridge]
+```
 
 ---
 
@@ -72,7 +94,7 @@ Unity MCP connects your tools using two components:
 3.  Click `+` -> `Add package from git URL...`.
 4.  Enter:
     ```
-    https://github.com/justinpbarnett/unity-mcp.git?path=/UnityMcpBridge
+    https://github.com/michaelnugent/unity-mcp.git?path=/UnityMcpBridge
     ```
 5.  Click `Add`.
 6. The MCP Server should automatically be installed onto your machine as a result of this process.
@@ -165,6 +187,41 @@ If Auto-Configure fails or you use a different client:
 
 ---
 
+## Enhanced Serialization System 🔄
+
+Unity MCP includes a sophisticated serialization system for translating Unity objects to JSON:
+
+- **Multi-depth Serialization Levels**:
+  - `Basic`: Simple properties and type information only
+  - `Standard`: Normal reflection-based serialization of properties and fields
+  - `Deep`: Comprehensive serialization of nested objects and Unity-specific properties
+
+- **Specialized Unity Type Handlers** for Transform, GameObject, Components, Rigidbody, and MeshRenderer
+
+- **Circular Reference Detection and Resolution** to prevent infinite recursion with path-based tracking
+
+- **Extensible Type Registry** allowing registration of custom handlers for additional types
+
+- **Error Handling and Metadata** via SerializationResult to aid in debugging
+
+This serialization system allows for detailed introspection of Unity objects in a format that's easily consumed by AI systems while handling the complexities of Unity's object model.
+
+---
+
+## Testing Requirements 🧪
+
+When contributing to Unity MCP, please include appropriate tests:
+
+- **Unit Tests**: Add tests for individual components in `UnityMcpServer/src/tests/`
+- **Integration Tests**: Consider end-to-end tests using the Unity MCP Client
+- **Test Configuration**: Follow the pytest configuration in pyproject.toml
+- **Serialization Testing**: Use the SerializationTestWindow to test serialization of various Unity objects
+- **Circular Reference Testing**: Include tests for serialization edge cases
+
+The test suite uses pytest with specific configurations for proper asyncio test isolation.
+
+---
+
 ## Usage ▶️
 
 1. **Open your Unity Project.** The Unity MCP Bridge (package) should connect automatically. Check status via Window > Unity MCP.
@@ -188,11 +245,15 @@ Help make Unity MCP better!
     
 3. **Make changes.**
     
-4. **Commit** (feat: Add cool new feature).
+4. **Add tests** for your new functionality:
+   - Unit tests for individual components
+   - Integration tests where appropriate
     
-5. **Push** your branch.
+5. **Commit** (feat: Add cool new feature).
     
-6. **Open a Pull Request** against the master branch.
+6. **Push** your branch.
+    
+7. **Open a Pull Request** against the master branch.
     
 
 ---
@@ -227,23 +288,16 @@ Help make Unity MCP better!
 
 </details>  
 
-Still stuck? [Open an Issue](https://www.google.com/url?sa=E&q=https%3A%2F%2Fgithub.com%2Fjustinpbarnett%2Funity-mcp%2Fissues).
+Still stuck? [Open an Issue](https://www.google.com/url?sa=E&q=https%3A%2F%2Fgithub.com%2Fmichaelnugent%2Funity-mcp%2Fissues).
 
 ---
 
 ## License 📜
 
-MIT License. See [LICENSE](https://www.google.com/url?sa=E&q=https%3A%2F%2Fgithub.com%2Fjustinpbarnett%2Funity-mcp%2Fblob%2Fmaster%2FLICENSE) file.
-
----
-
-## Contact 👋
-
-- **X/Twitter:** [@justinpbarnett](https://www.google.com/url?sa=E&q=https%3A%2F%2Fx.com%2Fjustinpbarnett)
-    
+MIT License. See [LICENSE](https://www.google.com/url?sa=E&q=https%3A%2F%2Fgithub.com%2Fmichaelnugent%2Funity-mcp%2Fblob%2Fmaster%2FLICENSE) file.
 
 ---
 
 ## Acknowledgments 🙏
 
-Thanks to the contributors and the Unity team.
+Thanks to the contributors, [Justin P Barnett](https://github.com/justinpbarnett), the original author of this code where I forked the project and the Unity team.
